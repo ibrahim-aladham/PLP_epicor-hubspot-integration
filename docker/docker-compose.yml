@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  epicor-hubspot-sync:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: epicor-hubspot-integration
+    environment:
+      - ENVIRONMENT=development
+    env_file:
+      - ../.env
+    volumes:
+      - ../src:/app/src
+      - ../logs:/app/logs
+    networks:
+      - integration-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  integration-network:
+    driver: bridge

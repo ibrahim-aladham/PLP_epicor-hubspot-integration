@@ -1,0 +1,168 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Epicor-HubSpot Integration Infrastructure'
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: production
+    AllowedValues:
+      - development
+      - staging
+      - production
+    Description: Environment name
+
+  LogRetentionDays:
+    Type: Number
+    Default: 30
+    Description: CloudWatch Logs retention period in days
+
+Resources:
+  # S3 Bucket for logs and artifacts
+  LogBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'epicor-hubspot-sync-logs-${AWS::AccountId}'
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldLogs
+            Status: Enabled
+            ExpirationInDays: 90
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: Epicor-HubSpot-Integration
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # Lambda Execution Role
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'epicor-hubspot-sync-role-${EnvironmentName}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:PutObject'
+                  - 's3:GetObject'
+                  - 's3:ListBucket'
+                Resource:
+                  - !GetAtt LogBucket.Arn
+                  - !Sub '${LogBucket.Arn}/*'
+        - PolicyName: SecretsManagerAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'secretsmanager:GetSecretValue'
+                Resource: !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:epicor-hubspot-*'
+      Tags:
+        - Key: Project
+          Value: Epicor-HubSpot-Integration
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # Lambda Function
+  SyncFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'epicor-hubspot-sync-${EnvironmentName}'
+      Runtime: python3.11
+      Handler: src.main.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 900  # 15 minutes
+      MemorySize: 512
+      Environment:
+        Variables:
+          LOG_LEVEL: INFO
+          ENVIRONMENT: !Ref EnvironmentName
+          AWS_S3_BUCKET: !Ref LogBucket
+      Tags:
+        - Key: Project
+          Value: Epicor-HubSpot-Integration
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # CloudWatch Log Group
+  SyncFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${SyncFunction}'
+      RetentionInDays: !Ref LogRetentionDays
+
+  # EventBridge Rule for daily schedule (2 AM EST = 7 AM UTC)
+  DailySchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'epicor-hubspot-daily-sync-${EnvironmentName}'
+      Description: 'Trigger Epicor-HubSpot sync daily at 2 AM EST'
+      ScheduleExpression: 'cron(0 7 * * ? *)'  # 2 AM EST = 7 AM UTC
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt SyncFunction.Arn
+          Id: SyncFunctionTarget
+
+  # Lambda permission for EventBridge
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SyncFunction
+      Action: 'lambda:InvokeFunction'
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt DailySchedule.Arn
+
+  # CloudWatch Alarm for Lambda errors
+  LambdaErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'epicor-hubspot-sync-errors-${EnvironmentName}'
+      AlarmDescription: 'Alert when Lambda function errors occur'
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref SyncFunction
+      TreatMissingData: notBreaching
+
+Outputs:
+  LambdaFunctionArn:
+    Description: ARN of the Lambda function
+    Value: !GetAtt SyncFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-LambdaArn'
+
+  LogBucketName:
+    Description: Name of the S3 bucket for logs
+    Value: !Ref LogBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-LogBucket'
+
+  ScheduleRuleArn:
+    Description: ARN of the EventBridge schedule rule
+    Value: !GetAtt DailySchedule.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ScheduleArn'
