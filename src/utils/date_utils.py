@@ -156,3 +156,105 @@ def format_datetime(date_str: Optional[str], fmt: str = '%Y-%m-%d %H:%M:%S') -> 
 
     except (ValueError, AttributeError):
         return date_str
+
+
+# Alias for consistency with spec
+epicor_datetime_to_unix_ms = epicor_to_unix_ms
+
+
+def guid_to_string(guid: Optional[str]) -> Optional[str]:
+    """
+    Convert GUID to string (removes hyphens and formats consistently).
+
+    Args:
+        guid: GUID string (e.g., "123e4567-e89b-12d3-a456-426614174000")
+
+    Returns:
+        Formatted GUID string without hyphens, or None if input is None
+
+    Examples:
+        >>> guid_to_string("123e4567-e89b-12d3-a456-426614174000")
+        '123e4567e89b12d3a456426614174000'
+        >>> guid_to_string(None)
+        None
+    """
+    if not guid:
+        return None
+
+    try:
+        # Remove hyphens and convert to lowercase for consistency
+        return str(guid).replace('-', '').lower()
+    except (ValueError, AttributeError) as e:
+        logger.warning(f"Failed to convert GUID '{guid}': {e}")
+        return str(guid) if guid else None
+
+
+def format_phone_e164(phone: Optional[str]) -> Optional[str]:
+    """
+    Format phone number to E.164 format (international standard).
+
+    E.164 format: +[country code][subscriber number]
+    Example: +14165551234
+
+    This is a simplified implementation that:
+    - Assumes North American numbers (country code +1) if no + prefix
+    - Removes all non-digit characters except leading +
+    - Returns None for invalid/empty inputs
+
+    Args:
+        phone: Phone number in various formats
+
+    Returns:
+        E.164 formatted phone number, or None if invalid/empty
+
+    Examples:
+        >>> format_phone_e164("(416) 555-1234")
+        '+14165551234'
+        >>> format_phone_e164("416-555-1234")
+        '+14165551234'
+        >>> format_phone_e164("+14165551234")
+        '+14165551234'
+        >>> format_phone_e164(None)
+        None
+        >>> format_phone_e164("")
+        None
+    """
+    if not phone:
+        return None
+
+    try:
+        # Convert to string and strip whitespace
+        phone_str = str(phone).strip()
+
+        if not phone_str:
+            return None
+
+        # Check if already has country code
+        has_country_code = phone_str.startswith('+')
+
+        # Remove all non-digit characters except leading +
+        if has_country_code:
+            digits = '+' + ''.join(c for c in phone_str[1:] if c.isdigit())
+        else:
+            digits = ''.join(c for c in phone_str if c.isdigit())
+
+        # If no digits, return None
+        if not digits or digits == '+':
+            return None
+
+        # Add country code if not present (assume North America +1)
+        if not has_country_code:
+            # Check if number already starts with 1 (North American number)
+            if len(digits) == 11 and digits.startswith('1'):
+                digits = '+' + digits
+            elif len(digits) == 10:
+                digits = '+1' + digits
+            else:
+                # For other lengths, just add + prefix
+                digits = '+' + digits
+
+        return digits
+
+    except Exception as e:
+        logger.warning(f"Failed to format phone '{phone}': {e}")
+        return None

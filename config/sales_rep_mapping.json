@@ -1,0 +1,25 @@
+{
+  "_comment": "Sales Rep to HubSpot Owner Mapping",
+  "_instructions": [
+    "Map Epicor SalesRepCode to HubSpot Owner ID.",
+    "Set 'default_owner_id' to assign unmapped reps to a specific owner,",
+    "or set it to null to leave unmapped deals unassigned."
+  ],
+
+  "default_owner_id": null,
+
+  "mappings": {
+    "REP001": "12345678",
+    "REP002": "87654321"
+  },
+
+  "_example_with_fallback": {
+    "default_owner_id": "99999999",
+    "mappings": {
+      "REP001": "12345678",
+      "REP002": "87654321"
+    }
+  },
+
+  "_note": "Replace the example mappings above with your actual sales rep codes and HubSpot owner IDs"
+}
