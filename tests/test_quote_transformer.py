@@ -49,7 +49,7 @@ class TestQuoteTransformer:
         assert result['epicor_doc_amount'] == 15000.00
         assert result['customer_po_number'] == 'PO-12345'
         assert result['discount_percentage'] == 10.5
-        assert result['deal_currency_code'] == 'CAD'
+        assert result['deal_currency_code_'] == 'CAD'
         assert result['epicor_sales_rep_code'] == 'REP001'
 
         # Verify boolean flags

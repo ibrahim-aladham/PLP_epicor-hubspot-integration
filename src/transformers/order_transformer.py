@@ -43,11 +43,11 @@ class OrderStageLogic:
         Derive HubSpot stage from Epicor fields.
 
         PRIORITY ORDER:
-        1. VoidOrder=true ’ cancelled
-        2. OpenOrder=false ’ completed
-        3. OrderHeld=true ’ order_held
-        4. OpenOrder=true AND TotalShipped>0 ’ partially_shipped
-        5. Default ’ order_received
+        1. VoidOrder=true ï¿½ cancelled
+        2. OpenOrder=false ï¿½ completed
+        3. OrderHeld=true ï¿½ order_held
+        4. OpenOrder=true AND TotalShipped>0 ï¿½ partially_shipped
+        5. Default ï¿½ order_received
 
         Args:
             order_data: Epicor order record
@@ -98,19 +98,19 @@ class OrderTransformer(BaseTransformer):
         Transform Epicor order to HubSpot deal properties.
 
         MAPPING (13 ACTIVE FIELDS SYNCED TO HUBSPOT):
-        1. OrderNum ’ dealname
-        2. OrderNum ’ epicor_order_number (PRIMARY)
-        3. CustNum ’ (association)
-        4. OrderDate ’ createdate
-        5. RequestDate ’ closedate
-        6. NeedByDate ’ need_by_date
-        7. OrderAmt ’ amount
-        8. DocOrderAmt ’ epicor_doc_amount
-        9. PONum ’ customer_po_number
-        10. OpenOrder ’ epicor_open_order
-        11. CurrencyCode ’ deal_currency_code
-        12. SysRowID ’ epicor_order_sysrowid
-        13. (hardcoded) ’ pipeline
+        1. OrderNum ï¿½ dealname
+        2. OrderNum ï¿½ epicor_order_number (PRIMARY)
+        3. CustNum ï¿½ (association)
+        4. OrderDate ï¿½ createdate
+        5. RequestDate ï¿½ closedate
+        6. NeedByDate ï¿½ need_by_date
+        7. OrderAmt ï¿½ amount
+        8. DocOrderAmt ï¿½ epicor_doc_amount
+        9. PONum ï¿½ customer_po_number
+        10. OpenOrder ï¿½ epicor_open_order
+        11. CurrencyCode ï¿½ deal_currency_code_
+        12. SysRowID ï¿½ epicor_order_sysrowid
+        13. (hardcoded) ï¿½ pipeline
 
         DELETED FIELDS (READ for stage logic, NOT synced):
         - TotalCharges
@@ -166,7 +166,7 @@ class OrderTransformer(BaseTransformer):
 
             # 9, 11. References
             'customer_po_number': self.safe_get(order_data, 'PONum'),
-            'deal_currency_code': self.safe_get(order_data, 'CurrencyCode'),
+            'deal_currency_code_': self.safe_get(order_data, 'CurrencyCode'),
 
             # 10. Boolean flags
             'epicor_open_order': self.safe_get(order_data, 'OpenOrder', True),

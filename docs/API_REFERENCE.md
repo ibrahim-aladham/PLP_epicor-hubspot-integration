@@ -67,7 +67,7 @@ All transformers extend `BaseTransformer` and convert Epicor data to HubSpot for
 
 ### CustomerTransformer (`src/transformers/customer_transformer.py`)
 
-Transforms Epicor Customer ’ HubSpot Company
+Transforms Epicor Customer ï¿½ HubSpot Company
 
 **Field Mapping (14 fields):**
 
@@ -95,7 +95,7 @@ Transforms Epicor Customer ’ HubSpot Company
 
 ### QuoteTransformer (`src/transformers/quote_transformer.py`)
 
-Transforms Epicor Quote ’ HubSpot Deal (Quotes Pipeline)
+Transforms Epicor Quote ï¿½ HubSpot Deal (Quotes Pipeline)
 
 **Field Mapping (21 fields):**
 
@@ -116,7 +116,7 @@ Transforms Epicor Quote ’ HubSpot Deal (Quotes Pipeline)
 | `Ordered` | `epicor_converted_to_order` | Boolean flag |
 | `Expired` | `epicor_expired` | Boolean flag |
 | `DiscountPercent` | `discount_percentage` | |
-| `CurrencyCode` | `deal_currency_code` | |
+| `CurrencyCode` | `deal_currency_code_` | |
 | `SysRowID` | `epicor_quote_sysrowid` | GUID string |
 | `SalesRepCode` | `epicor_sales_rep_code` | |
 | `SalesRepCode` | `hubspot_owner_id` | If mapped |
@@ -133,7 +133,7 @@ Transforms Epicor Quote ’ HubSpot Deal (Quotes Pipeline)
 
 ### OrderTransformer (`src/transformers/order_transformer.py`)
 
-Transforms Epicor SalesOrder ’ HubSpot Deal (Orders Pipeline)
+Transforms Epicor SalesOrder ï¿½ HubSpot Deal (Orders Pipeline)
 
 **Field Mapping (13 fields):**
 
@@ -148,7 +148,7 @@ Transforms Epicor SalesOrder ’ HubSpot Deal (Orders Pipeline)
 | `DocOrderAmt` | `epicor_doc_amount` | |
 | `PONum` | `customer_po_number` | |
 | `OpenOrder` | `epicor_open_order` | Boolean flag |
-| `CurrencyCode` | `deal_currency_code` | |
+| `CurrencyCode` | `deal_currency_code_` | |
 | `SysRowID` | `epicor_order_sysrowid` | GUID string |
 | (hardcoded) | `pipeline` | Orders pipeline ID |
 | `VoidOrder`, `OrderHeld`, `TotalShipped`, `OpenOrder` | `dealstage` | Via stage logic (NOT synced as properties) |
@@ -160,7 +160,7 @@ Transforms Epicor SalesOrder ’ HubSpot Deal (Orders Pipeline)
 
 ### LineItemTransformer (`src/transformers/line_item_transformer.py`)
 
-Transforms Epicor QuoteDtl/OrderDtl ’ HubSpot Line Items
+Transforms Epicor QuoteDtl/OrderDtl ï¿½ HubSpot Line Items
 
 **Methods:**
 
@@ -225,18 +225,18 @@ Transforms Epicor QuoteDtl/OrderDtl ’ HubSpot Line Items
 | Closed Lost (0%) | `closedlost` | Permanent terminal |
 
 **Stage Derivation Priority:**
-1. `Ordered=true` ’ `closedwon`
-2. `Expired=true` ’ `quote_expired`
-3. `QuoteClosed=true AND Ordered=false` ’ `closedlost`
-4. `Quoted=true` ’ `quote_sent`
-5. Default ’ `quote_created`
+1. `Ordered=true` ï¿½ `closedwon`
+2. `Expired=true` ï¿½ `quote_expired`
+3. `QuoteClosed=true AND Ordered=false` ï¿½ `closedlost`
+4. `Quoted=true` ï¿½ `quote_sent`
+5. Default ï¿½ `quote_created`
 
 **Update Rules:**
-- New deal ’ Always set
-- Terminal from Epicor ’ Always update
-- Permanent terminals ’ Cannot reopen
-- Reversible terminal ’ Can reactivate
-- Forward only ’ Never backward
+- New deal ï¿½ Always set
+- Terminal from Epicor ï¿½ Always update
+- Permanent terminals ï¿½ Cannot reopen
+- Reversible terminal ï¿½ Can reactivate
+- Forward only ï¿½ Never backward
 
 ### Order Pipeline (5 Stages)
 

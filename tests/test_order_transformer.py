@@ -45,7 +45,7 @@ class TestOrderTransformer:
         assert result['epicor_doc_amount'] == 25000.00
         assert result['customer_po_number'] == 'PO-67890'
         assert result['epicor_open_order'] == True
-        assert result['deal_currency_code'] == 'CAD'
+        assert result['deal_currency_code_'] == 'CAD'
 
         # Verify stage (new order with no shipments)
         assert result['dealstage'] == 'order_received'

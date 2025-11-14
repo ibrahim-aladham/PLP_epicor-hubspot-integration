@@ -300,7 +300,7 @@ $count=true               # Include total count in response
 | Ordered | boolean | epicor_converted_to_order | boolean | Direct | Won |
 | Expired | boolean | epicor_expired | boolean | Direct | Expired |
 | DiscountPercent | decimal | discount_percentage | number | Direct | Discount % |
-| CurrencyCode | string(3) | deal_currency_code | text | Direct | Currency |
+| CurrencyCode | string(3) | deal_currency_code_ | text | Direct | Currency |
 | SysRowID | guid | epicor_quote_sysrowid | text | To string | System ID |
 | (hardcoded) | - | pipeline | text | Pipeline ID | Quotes pipe |
 
@@ -342,7 +342,7 @@ def get_quote_stage(quote):
 | OrderHeld | boolean | epicor_order_held | boolean | Direct | On hold |
 | VoidOrder | boolean | epicor_void_order | boolean | Direct | Voided |
 | OrderStatus | string(10) | epicor_order_status | text | Direct | Status |
-| CurrencyCode | string(3) | deal_currency_code | text | Direct | Currency |
+| CurrencyCode | string(3) | deal_currency_code_ | text | Direct | Currency |
 | SysRowID | guid | epicor_order_sysrowid | text | To string | System ID |
 | (hardcoded) | - | pipeline | text | Pipeline ID | Orders pipe |
 

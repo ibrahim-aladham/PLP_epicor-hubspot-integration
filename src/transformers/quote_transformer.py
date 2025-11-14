@@ -58,11 +58,11 @@ class QuoteStageLogic:
         Derive HubSpot stage from Epicor boolean flags.
 
         PRIORITY ORDER (evaluated in exact order):
-        1. Ordered=true í closedwon
-        2. Expired=true í quote_expired
-        3. QuoteClosed=true AND Ordered=false í closedlost
-        4. Quoted=true í quote_sent
-        5. Default í quote_created
+        1. Ordered=true ÔøΩ closedwon
+        2. Expired=true ÔøΩ quote_expired
+        3. QuoteClosed=true AND Ordered=false ÔøΩ closedlost
+        4. Quoted=true ÔøΩ quote_sent
+        5. Default ÔøΩ quote_created
 
         Args:
             quote_data: Epicor quote record
@@ -99,11 +99,11 @@ class QuoteStageLogic:
         Determine if HubSpot stage should be updated.
 
         RULES:
-        1. New deal í always set stage
-        2. Terminal stages from Epicor í always update
-        3. Permanent terminals (Won/Lost) í cannot reopen
-        4. Reversible terminal (Expired) í can reactivate
-        5. Forward only í never move backward
+        1. New deal ÔøΩ always set stage
+        2. Terminal stages from Epicor ÔøΩ always update
+        3. Permanent terminals (Won/Lost) ÔøΩ cannot reopen
+        4. Reversible terminal (Expired) ÔøΩ can reactivate
+        5. Forward only ÔøΩ never move backward
 
         Args:
             current_hubspot_stage: Current stage in HubSpot (None if new deal)
@@ -135,7 +135,7 @@ class QuoteStageLogic:
         # Rule 4: Can reactivate reversible terminals (Expired)
         if current in QuoteStageLogic.REVERSIBLE_TERMINAL_STAGES:
             logger.info(
-                f"Reactivating quote from reversible terminal '{current}' í '{new}'"
+                f"Reactivating quote from reversible terminal '{current}' ÔøΩ '{new}'"
             )
             return True
 
@@ -146,13 +146,13 @@ class QuoteStageLogic:
         if new_position > current_position:
             logger.debug(
                 f"Forward progression: '{current}' (pos {current_position}) "
-                f"í '{new}' (pos {new_position})"
+                f"ÔøΩ '{new}' (pos {new_position})"
             )
             return True
         else:
             logger.debug(
                 f"Blocking backward movement: '{current}' (pos {current_position}) "
-                f"ê '{new}' (pos {new_position})"
+                f"ÔøΩ '{new}' (pos {new_position})"
             )
             return False
 
@@ -171,27 +171,27 @@ class QuoteTransformer(BaseTransformer):
         Transform Epicor quote to HubSpot deal properties.
 
         MAPPING (21 ACTIVE FIELDS):
-        1. QuoteNum í dealname
-        2. QuoteNum í epicor_quote_number (PRIMARY)
-        3. CustNum í (association)
-        4. EntryDate í createdate
-        5. DueDate í closedate
-        6. ExpirationDate í quote_expiration_date
-        7. DateQuoted í quote_sent_date
-        8. QuoteAmt í amount
-        9. DocQuoteAmt í epicor_doc_amount
-        10. PONum í customer_po_number
-        11. Boolean flags í dealstage (using approved logic)
-        12. Quoted í epicor_quoted
-        13. QuoteClosed í epicor_closed
-        14. Ordered í epicor_converted_to_order
-        15. Expired í epicor_expired
-        16. DiscountPercent í discount_percentage
-        17. CurrencyCode í deal_currency_code
-        18. SysRowID í epicor_quote_sysrowid
-        19. SalesRepCode í epicor_sales_rep_code
-        20. SalesRepCode í hubspot_owner_id (if mapped)
-        21. (hardcoded) í pipeline
+        1. QuoteNum ÔøΩ dealname
+        2. QuoteNum ÔøΩ epicor_quote_number (PRIMARY)
+        3. CustNum ÔøΩ (association)
+        4. EntryDate ÔøΩ createdate
+        5. DueDate ÔøΩ closedate
+        6. ExpirationDate ÔøΩ quote_expiration_date
+        7. DateQuoted ÔøΩ quote_sent_date
+        8. QuoteAmt ÔøΩ amount
+        9. DocQuoteAmt ÔøΩ epicor_doc_amount
+        10. PONum ÔøΩ customer_po_number
+        11. Boolean flags ÔøΩ dealstage (using approved logic)
+        12. Quoted ÔøΩ epicor_quoted
+        13. QuoteClosed ÔøΩ epicor_closed
+        14. Ordered ÔøΩ epicor_converted_to_order
+        15. Expired ÔøΩ epicor_expired
+        16. DiscountPercent ÔøΩ discount_percentage
+        17. CurrencyCode ÔøΩ deal_currency_code_
+        18. SysRowID ÔøΩ epicor_quote_sysrowid
+        19. SalesRepCode ÔøΩ epicor_sales_rep_code
+        20. SalesRepCode ÔøΩ hubspot_owner_id (if mapped)
+        21. (hardcoded) ÔøΩ pipeline
 
         Args:
             quote_data: Epicor quote record
@@ -252,7 +252,7 @@ class QuoteTransformer(BaseTransformer):
 
             # 10, 17. References
             'customer_po_number': self.safe_get(quote_data, 'PONum'),
-            'deal_currency_code': self.safe_get(quote_data, 'CurrencyCode'),
+            'deal_currency_code_': self.safe_get(quote_data, 'CurrencyCode'),
 
             # 12-15. Boolean flags
             'epicor_quoted': self.safe_get(quote_data, 'Quoted', False),
