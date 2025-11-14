@@ -144,8 +144,8 @@ def log_errors(func: Callable) -> Callable:
                 exc_info=True,
                 extra={
                     'function': func.__name__,
-                    'args': str(args)[:200],  # Limit size
-                    'kwargs': str(kwargs)[:200]  # Limit size
+                    'function_args': str(args)[:200],  # Renamed to avoid LogRecord conflict
+                    'function_kwargs': str(kwargs)[:200]  # Renamed to avoid LogRecord conflict
                 }
             )
             raise

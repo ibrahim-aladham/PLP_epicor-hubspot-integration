@@ -1,0 +1,244 @@
+{
+  "_comment": "Sales Rep Mapping Data - Use this to fill config/sales_rep_mapping.json",
+  "_instructions": [
+    "1. Review the suggested_mappings (auto-matched by email)",
+    "2. Review the unmapped_epicor_reps list",
+    "3. Review the available_hubspot_owners list",
+    "4. Create manual mappings for unmapped reps",
+    "5. Update config/sales_rep_mapping.json with your final mappings"
+  ],
+  "suggested_mappings": {},
+  "unmapped_epicor_reps": [
+    {
+      "code": "amartine",
+      "name": "Arturo Martinez",
+      "email": "",
+      "role": ""
+    },
+    {
+      "code": "C053",
+      "name": "Alyssa Verdoni",
+      "email": "",
+      "role": ""
+    },
+    {
+      "code": "Comms E",
+      "name": "Communications East",
+      "email": "",
+      "role": "AGENT"
+    },
+    {
+      "code": "Comms W",
+      "name": "Communications West",
+      "email": "",
+      "role": "AGENT"
+    },
+    {
+      "code": "DER",
+      "name": "Derrick Bruder",
+      "email": "",
+      "role": "AGENT"
+    },
+    {
+      "code": "DS",
+      "name": "Debbie Schwantz",
+      "email": "",
+      "role": "SENIOR"
+    },
+    {
+      "code": "DUFR",
+      "name": "Dustin Frank",
+      "email": "dfrank@preformed.on.ca",
+      "role": "AGENT"
+    },
+    {
+      "code": "Energy E",
+      "name": "Energy East",
+      "email": "",
+      "role": "AGENT"
+    },
+    {
+      "code": "Energy W",
+      "name": "Energy West",
+      "email": "",
+      "role": "AGENT"
+    },
+    {
+      "code": "HS",
+      "name": "Heather Shuttleworth",
+      "email": "hshuttleworth@preformed.on.ca",
+      "role": "OFFICEM"
+    },
+    {
+      "code": "JC",
+      "name": "June Chase",
+      "email": "reception@preformed.on.ca",
+      "role": "AGENT"
+    },
+    {
+      "code": "M19",
+      "name": "Jonathan St-Maurice",
+      "email": "",
+      "role": ""
+    },
+    {
+      "code": "M2",
+      "name": "Marc-André Lafrenière",
+      "email": "",
+      "role": ""
+    },
+    {
+      "code": "MGR",
+      "name": "Sales Manager",
+      "email": "",
+      "role": "SALESM"
+    },
+    {
+      "code": "MM",
+      "name": "Mike Morse",
+      "email": "",
+      "role": "AGENT"
+    },
+    {
+      "code": "MPAD",
+      "name": "Mark Paddison",
+      "email": "",
+      "role": "AGENT"
+    },
+    {
+      "code": "PL",
+      "name": "Paul Losinski",
+      "email": "",
+      "role": "COMM"
+    },
+    {
+      "code": "PLTMGR",
+      "name": "Paul Watson",
+      "email": "plantmgr@preformed.on.ca",
+      "role": "PLTMGR"
+    },
+    {
+      "code": "RC",
+      "name": "Ralph Crane",
+      "email": "rcrane@preformed.on.ca",
+      "role": "DIRECT"
+    },
+    {
+      "code": "REP",
+      "name": "Sales Representative",
+      "email": "",
+      "role": "AGENT"
+    },
+    {
+      "code": "SN",
+      "name": "Steve Nicholson",
+      "email": "snicholson@preformed.on.ca",
+      "role": "SALESM"
+    },
+    {
+      "code": "STSADM",
+      "name": "Gerry Loranger",
+      "email": "",
+      "role": "SYSADM"
+    }
+  ],
+  "available_hubspot_owners": [
+    {
+      "id": "5578992",
+      "email": "kevin@thinkfuel.ca",
+      "firstName": "Kevin",
+      "lastName": "D'Arcy",
+      "userId": 5578992
+    },
+    {
+      "id": "12865689",
+      "email": "devin@thinkfuel.ca",
+      "firstName": "Devin",
+      "lastName": "Tempo Wright",
+      "userId": 12865689
+    },
+    {
+      "id": "44058637",
+      "email": "simona@thinkfuel.ca",
+      "firstName": "Simona",
+      "lastName": "Kovacova",
+      "userId": 44058637
+    },
+    {
+      "id": "54883773",
+      "email": "sabrina@thinkfuel.ca",
+      "firstName": "Sabrina",
+      "lastName": "Comai",
+      "userId": 54883773
+    },
+    {
+      "id": "78296483",
+      "email": "prinka@thinkfuel.ca",
+      "firstName": "Prinka",
+      "lastName": "Kohli",
+      "userId": 78296483
+    },
+    {
+      "id": "79770430",
+      "email": "cmercier@preformed.ca",
+      "firstName": "Collin",
+      "lastName": "Mercier",
+      "userId": 79770430
+    },
+    {
+      "id": "79965628",
+      "email": "ibrahim@thinkfuel.ca",
+      "firstName": "Ibrahim",
+      "lastName": "Aladham",
+      "userId": 79965628
+    },
+    {
+      "id": "258982626",
+      "email": "jfoy@preformed.ca",
+      "firstName": "Josh",
+      "lastName": "Foy",
+      "userId": 258982626
+    },
+    {
+      "id": "258982627",
+      "email": "mlord@preformed.ca",
+      "firstName": "Martin",
+      "lastName": "Lord",
+      "userId": 258982627
+    },
+    {
+      "id": "259029702",
+      "email": "gbrehaut@preformed.ca",
+      "firstName": "Glen",
+      "lastName": "Brehaut",
+      "userId": 259029702
+    },
+    {
+      "id": "259394556",
+      "email": "dchhean@preformed.ca",
+      "firstName": "David",
+      "lastName": "Chhean",
+      "userId": 259394556
+    },
+    {
+      "id": "259394557",
+      "email": "vdupont@preformed.ca",
+      "firstName": "",
+      "lastName": "",
+      "userId": 259394557
+    },
+    {
+      "id": "261287068",
+      "email": "jp.paradis@plp.com",
+      "firstName": "Jean-Philippe",
+      "lastName": "Paradis",
+      "userId": 261287068
+    }
+  ],
+  "statistics": {
+    "total_epicor_reps": 22,
+    "total_hubspot_owners": 13,
+    "auto_matched": 0,
+    "needs_manual_mapping": 22
+  }
+}
