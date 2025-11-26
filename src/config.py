@@ -3,6 +3,9 @@ Configuration management for Epicor-HubSpot integration.
 
 This module provides a centralized configuration class that loads settings from
 environment variables using Pydantic for validation and type safety.
+
+In AWS Lambda, credentials are loaded from AWS Secrets Manager.
+For local development, credentials are loaded from .env file.
 """
 
 import os
@@ -13,6 +16,109 @@ from pydantic_settings import BaseSettings
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# AWS Secrets Manager Integration
+# =============================================================================
+
+def load_secrets_from_aws(secret_name: Optional[str] = None) -> bool:
+    """
+    Load secrets from AWS Secrets Manager and set as environment variables.
+
+    This function should be called BEFORE Settings() is instantiated.
+    It detects if running in AWS Lambda and loads credentials from Secrets Manager.
+
+    Args:
+        secret_name: Name of the secret in AWS Secrets Manager.
+                    Defaults to env var AWS_SECRET_NAME or 'epicor-hubspot-credentials'
+
+    Returns:
+        True if secrets were loaded, False if skipped (local development)
+
+    Expected secret JSON structure:
+    {
+        "EPICOR_BASE_URL": "https://...",
+        "EPICOR_COMPANY": "PLPC",
+        "EPICOR_USERNAME": "...",
+        "EPICOR_PASSWORD": "...",
+        "EPICOR_API_KEY": "...",
+        "HUBSPOT_API_KEY": "...",
+        "HUBSPOT_QUOTES_PIPELINE_ID": "...",
+        "HUBSPOT_ORDERS_PIPELINE_ID": "..."
+    }
+    """
+    # Check if running in AWS Lambda (AWS_LAMBDA_FUNCTION_NAME is set by Lambda runtime)
+    is_lambda = os.environ.get('AWS_LAMBDA_FUNCTION_NAME') is not None
+
+    # Also check if secrets are already present (e.g., from .env in local dev)
+    has_credentials = os.environ.get('EPICOR_BASE_URL') is not None
+
+    if not is_lambda:
+        logger.info("Not running in AWS Lambda - skipping Secrets Manager")
+        return False
+
+    if has_credentials:
+        logger.info("Credentials already set in environment - skipping Secrets Manager")
+        return False
+
+    # Determine secret name
+    secret_name = secret_name or os.environ.get('AWS_SECRET_NAME', 'epicor-hubspot-credentials')
+
+    logger.info(f"Loading secrets from AWS Secrets Manager: {secret_name}")
+
+    try:
+        import boto3
+        from botocore.exceptions import ClientError
+
+        # Get region from environment or default
+        region = os.environ.get('AWS_REGION', 'us-east-1')
+
+        # Create Secrets Manager client
+        client = boto3.client('secretsmanager', region_name=region)
+
+        # Fetch the secret
+        response = client.get_secret_value(SecretId=secret_name)
+
+        # Parse secret string as JSON
+        if 'SecretString' in response:
+            secrets = json.loads(response['SecretString'])
+        else:
+            # Binary secret - decode first
+            import base64
+            secrets = json.loads(base64.b64decode(response['SecretBinary']))
+
+        # Set each secret as environment variable
+        loaded_keys = []
+        for key, value in secrets.items():
+            # Convert to uppercase for consistency
+            env_key = key.upper()
+            os.environ[env_key] = str(value)
+            loaded_keys.append(env_key)
+
+        logger.info(f"Successfully loaded {len(loaded_keys)} secrets from AWS Secrets Manager")
+        logger.debug(f"Loaded keys: {', '.join(loaded_keys)}")
+
+        return True
+
+    except ImportError:
+        logger.error("boto3 not installed - cannot load from Secrets Manager")
+        raise
+    except ClientError as e:
+        error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+        if error_code == 'ResourceNotFoundException':
+            logger.error(f"Secret '{secret_name}' not found in Secrets Manager")
+        elif error_code == 'AccessDeniedException':
+            logger.error(f"Access denied to secret '{secret_name}' - check IAM permissions")
+        else:
+            logger.error(f"Failed to load secret '{secret_name}': {e}")
+        raise
+    except json.JSONDecodeError as e:
+        logger.error(f"Secret '{secret_name}' is not valid JSON: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error loading secrets: {e}")
+        raise
 
 
 class Settings(BaseSettings):

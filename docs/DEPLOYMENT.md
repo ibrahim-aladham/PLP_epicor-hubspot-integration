@@ -126,8 +126,8 @@ Edit `config/sales_rep_mapping.json`:
 ```
 
 **To get HubSpot Owner IDs:**
-1. Go to HubSpot ’ Settings ’ Users & Teams
-2. Click on user ’ Copy Owner ID from URL
+1. Go to HubSpot ï¿½ Settings ï¿½ Users & Teams
+2. Click on user ï¿½ Copy Owner ID from URL
 
 ### 6. Run Locally
 
@@ -180,29 +180,45 @@ cd ..
 
 #### Step 3: Upload Code
 
-1. In Lambda function page, click **Upload from** ’ **.zip file**
+1. In Lambda function page, click **Upload from** ï¿½ **.zip file**
 2. Upload `deployment-package.zip`
 3. Click **Save**
 
-#### Step 4: Configure Environment Variables
+#### Step 4: Create Secret in AWS Secrets Manager
 
-1. Go to **Configuration** ’ **Environment variables**
-2. Click **Edit** ’ **Add environment variable**
-3. Add all variables from your `.env` file:
+**Important:** Do NOT store credentials as Lambda environment variables. Use Secrets Manager instead.
+
+1. Go to **AWS Secrets Manager** console
+2. Click **Store a new secret**
+3. Choose **Other type of secret**
+4. Enter key/value pairs (or paste JSON):
+   ```json
+   {
+     "EPICOR_BASE_URL": "https://plpc-apperp.preformed.ca/ERP11PROD",
+     "EPICOR_COMPANY": "PLPC",
+     "EPICOR_USERNAME": "your_username",
+     "EPICOR_PASSWORD": "your_password",
+     "EPICOR_API_KEY": "your_api_key",
+     "HUBSPOT_API_KEY": "your_hubspot_token",
+     "HUBSPOT_QUOTES_PIPELINE_ID": "your_quotes_pipeline_id",
+     "HUBSPOT_ORDERS_PIPELINE_ID": "your_orders_pipeline_id"
+   }
+   ```
+5. Name the secret: `epicor-hubspot-credentials-production`
+6. Click **Store**
+
+#### Step 5: Configure Lambda Environment Variables
+
+1. Go to **Configuration** â†’ **Environment variables**
+2. Click **Edit** â†’ **Add environment variable**
+3. Add only these non-sensitive variables:
 
 ```
-EPICOR_BASE_URL = https://...
-EPICOR_COMPANY = ...
-EPICOR_USERNAME = ...
-EPICOR_PASSWORD = ...
-EPICOR_API_KEY = ...
-HUBSPOT_API_KEY = ...
-HUBSPOT_QUOTES_PIPELINE_ID = ...
-HUBSPOT_ORDERS_PIPELINE_ID = ...
-SYNC_BATCH_SIZE = 100
-SYNC_MAX_RETRIES = 3
+AWS_SECRET_NAME = epicor-hubspot-credentials-production
 LOG_LEVEL = INFO
 ENVIRONMENT = production
+SYNC_BATCH_SIZE = 100
+SYNC_MAX_RETRIES = 3
 SYNC_CUSTOMERS = true
 SYNC_QUOTES = true
 SYNC_ORDERS = true
@@ -210,7 +226,9 @@ SYNC_ORDERS = true
 
 4. Click **Save**
 
-#### Step 5: Configure Function Settings
+The Lambda function will automatically load credentials from Secrets Manager at runtime.
+
+#### Step 6: Configure Function Settings
 
 1. **General Configuration**:
    - Memory: **512 MB** (or more for large datasets)
@@ -222,7 +240,7 @@ SYNC_ORDERS = true
    - Select subnets
    - Select security groups
 
-#### Step 6: Test Function
+#### Step 7: Test Function
 
 1. Click **Test** tab
 2. Create new test event:
@@ -307,7 +325,7 @@ sam deploy --guided
 
 ### Getting HubSpot Pipeline IDs
 
-1. Go to HubSpot ’ **Settings** ’ **Objects** ’ **Deals** ’ **Pipelines**
+1. Go to HubSpot ï¿½ **Settings** ï¿½ **Objects** ï¿½ **Deals** ï¿½ **Pipelines**
 2. Click on your **Quotes** pipeline
 3. Copy the ID from the URL:
    ```
@@ -322,7 +340,7 @@ sam deploy --guided
 
 #### Option 1: EventBridge (CloudWatch Events)
 
-1. Go to **EventBridge** ’ **Rules** ’ **Create rule**
+1. Go to **EventBridge** ï¿½ **Rules** ï¿½ **Create rule**
 2. Define schedule:
    - **Rate expression**: `rate(1 hour)` (every hour)
    - **Cron expression**: `cron(0 */4 * * ? *)` (every 4 hours)
@@ -388,7 +406,7 @@ pytest tests/ --cov=src --cov-report=html
 
 All logs are automatically sent to CloudWatch Logs:
 
-1. Go to **CloudWatch** ’ **Log groups**
+1. Go to **CloudWatch** ï¿½ **Log groups**
 2. Find `/aws/lambda/epicor-hubspot-integration`
 3. View log streams
 
@@ -402,7 +420,7 @@ All logs are automatically sent to CloudWatch Logs:
 - " Created company"
 - " Updated quote"
 
-   Warning indicators:
+ï¿½  Warning indicators:
 - "Rep 'XXX' not mapped"
 - "Company not found"
 - "Stage update blocked"
@@ -452,35 +470,77 @@ See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common issues and solutions.
 
 ## Security Best Practices
 
-### 1. Secrets Management
+### 1. Secrets Management (REQUIRED for AWS Lambda)
 
-**Use AWS Secrets Manager (Recommended):**
+The integration automatically loads credentials from AWS Secrets Manager when running in Lambda.
+This is the recommended and default approach - **do NOT store credentials in Lambda environment variables**.
 
-```python
-import boto3
-import json
+#### Step 1: Create the Secret
 
-def get_secret(secret_name):
-    client = boto3.client('secretsmanager')
-    response = client.get_secret_value(SecretId=secret_name)
-    return json.loads(response['SecretString'])
-
-# In Lambda function
-epicor_creds = get_secret('epicor-credentials')
-hubspot_key = get_secret('hubspot-api-key')
-```
-
-**Store secrets:**
+Create a secret with all credentials in a single JSON object:
 
 ```bash
+# For production environment
 aws secretsmanager create-secret \
-  --name epicor-credentials \
-  --secret-string '{"username":"...","password":"...","api_key":"..."}'
+  --name epicor-hubspot-credentials-production \
+  --description "Epicor and HubSpot API credentials for production" \
+  --secret-string '{
+    "EPICOR_BASE_URL": "https://plpc-apperp.preformed.ca/ERP11PROD",
+    "EPICOR_COMPANY": "PLPC",
+    "EPICOR_USERNAME": "your_epicor_username",
+    "EPICOR_PASSWORD": "your_epicor_password",
+    "EPICOR_API_KEY": "your_epicor_api_key",
+    "HUBSPOT_API_KEY": "your_hubspot_private_app_token",
+    "HUBSPOT_QUOTES_PIPELINE_ID": "your_quotes_pipeline_id",
+    "HUBSPOT_ORDERS_PIPELINE_ID": "your_orders_pipeline_id"
+  }'
 
+# For development/staging (use different secret name)
 aws secretsmanager create-secret \
-  --name hubspot-api-key \
-  --secret-string '{"api_key":"..."}'
+  --name epicor-hubspot-credentials-development \
+  --secret-string '{...}'
 ```
+
+#### Step 2: Verify Secret
+
+```bash
+# Verify secret was created
+aws secretsmanager describe-secret \
+  --secret-id epicor-hubspot-credentials-production
+
+# Test retrieving secret (be careful - outputs sensitive data)
+aws secretsmanager get-secret-value \
+  --secret-id epicor-hubspot-credentials-production \
+  --query 'SecretString' --output text | jq .
+```
+
+#### Step 3: Update Secret (when credentials change)
+
+```bash
+aws secretsmanager update-secret \
+  --secret-id epicor-hubspot-credentials-production \
+  --secret-string '{
+    "EPICOR_BASE_URL": "...",
+    ...
+  }'
+```
+
+#### How It Works
+
+1. Lambda starts with only `AWS_SECRET_NAME` environment variable set
+2. `lambda_handler()` calls `load_secrets_from_aws()` before loading settings
+3. Secrets are fetched from Secrets Manager and set as environment variables
+4. `Settings()` loads from environment variables via Pydantic
+5. Credentials are never stored in Lambda configuration
+
+#### Secret Name Convention
+
+The CloudFormation template uses environment-specific secret names:
+- Production: `epicor-hubspot-credentials-production`
+- Staging: `epicor-hubspot-credentials-staging`
+- Development: `epicor-hubspot-credentials-development`
+
+This is set automatically via the `AWS_SECRET_NAME` Lambda environment variable.
 
 ### 2. IAM Permissions
 
@@ -541,18 +601,22 @@ If deployment fails:
 
 Before going live:
 
-- [ ] All environment variables configured
-- [ ] Sales rep mapping file updated with real data
-- [ ] HubSpot pipeline IDs verified
-- [ ] Test sync with small dataset
-- [ ] CloudWatch alarms configured
-- [ ] Secrets stored in Secrets Manager (not environment variables)
-- [ ] Lambda timeout appropriate for data volume
-- [ ] Lambda memory appropriate for data volume
-- [ ] Scheduled trigger configured
+- [ ] **AWS Secrets Manager secret created** with all credentials:
+  - `epicor-hubspot-credentials-production` created
+  - Contains: EPICOR_BASE_URL, EPICOR_COMPANY, EPICOR_USERNAME, EPICOR_PASSWORD, EPICOR_API_KEY
+  - Contains: HUBSPOT_API_KEY, HUBSPOT_QUOTES_PIPELINE_ID, HUBSPOT_ORDERS_PIPELINE_ID
+- [ ] Sales rep mapping file updated with real data (`config/sales_rep_mapping.json`)
+- [ ] HubSpot pipeline IDs verified and added to secret
+- [ ] CloudFormation stack deployed (`make deploy-stack`)
+- [ ] Lambda code deployed (`make deploy`)
+- [ ] Test sync with small dataset (`make invoke`)
+- [ ] CloudWatch alarms configured (included in CloudFormation)
+- [ ] Lambda timeout appropriate for data volume (default: 15 min)
+- [ ] Lambda memory appropriate for data volume (default: 512 MB)
+- [ ] Scheduled trigger configured (default: daily at 2 AM EST)
 - [ ] Error notification setup (SNS/email)
 - [ ] Documentation shared with team
 
 ---
 
-*Last Updated: November 13, 2025*
+*Last Updated: November 26, 2025*

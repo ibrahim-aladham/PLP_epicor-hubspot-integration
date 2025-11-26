@@ -1,6 +1,13 @@
 """
 Main entry point for Epicor-HubSpot integration.
 Can be run locally or as AWS Lambda function.
+
+For AWS Lambda:
+- Credentials are loaded from AWS Secrets Manager at runtime
+- Secret name defaults to 'epicor-hubspot-credentials' or AWS_SECRET_NAME env var
+
+For local development:
+- Credentials are loaded from .env file
 """
 
 import logging
@@ -10,27 +17,47 @@ from datetime import datetime
 from src.clients.epicor_client import EpicorClient
 from src.clients.hubspot_client import HubSpotClient
 from src.sync.sync_manager import SyncManager
-from src.config import settings
+from src.config import load_secrets_from_aws, get_settings
 from src.utils.logger import setup_logger
 
 
-# Setup logging
-logger = setup_logger("epicor_hubspot_sync", settings.log_level)
+# Module-level logger (basic until settings are loaded)
+logger = logging.getLogger(__name__)
 
 
 def lambda_handler(event, context):
     """
     AWS Lambda handler function.
 
+    Loads credentials from AWS Secrets Manager before initializing settings.
+
     Args:
         event: Lambda event data
         context: Lambda context
 
     Returns:
-        Response dict
+        Response dict with statusCode and body
     """
-    logger.info("Lambda function invoked")
+    # Step 1: Load secrets from AWS Secrets Manager (before settings init)
+    try:
+        load_secrets_from_aws()
+    except Exception as e:
+        # Log to CloudWatch even without proper logger setup
+        print(f"CRITICAL: Failed to load secrets from AWS Secrets Manager: {e}")
+        return {
+            'statusCode': 500,
+            'body': {'error': f'Failed to load secrets: {str(e)}'}
+        }
 
+    # Step 2: Now we can safely get settings and setup proper logging
+    settings = get_settings()
+    global logger
+    logger = setup_logger("epicor_hubspot_sync", settings.log_level)
+
+    logger.info("Lambda function invoked")
+    logger.info(f"Event: {event}")
+
+    # Step 3: Run the sync
     try:
         result = main()
         return {
@@ -121,4 +148,12 @@ def main():
 
 
 if __name__ == "__main__":
+    # For local development, load .env file
+    from dotenv import load_dotenv
+    load_dotenv()
+
+    # Setup logging for local run
+    settings = get_settings()
+    logger = setup_logger("epicor_hubspot_sync", settings.log_level)
+
     main()
