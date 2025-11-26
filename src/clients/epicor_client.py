@@ -67,6 +67,12 @@ class EpicorClient:
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
 
+        # Disable SSL verification for self-signed certificates (Epicor server)
+        self.session.verify = False
+        # Suppress SSL warnings
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
         # Set authentication headers (BOTH Basic Auth AND API Key required)
         credentials = f"{username}:{password}"
         encoded_creds = base64.b64encode(credentials.encode()).decode()
@@ -222,8 +228,7 @@ class EpicorClient:
             params['$select'] = select
         if orderby:
             params['$orderby'] = orderby
-        if limit:
-            params['$top'] = str(limit)
+        # Note: Don't add $top here - _get_paged handles pagination with $top/$skip
 
         url = self._build_url(service, entity_set, params)
 
@@ -235,14 +240,15 @@ class EpicorClient:
 
     def test_connection(self) -> bool:
         """
-        Test API connection by calling the environment endpoint.
+        Test API connection by fetching one customer record.
 
         Returns:
             True if connection successful, False otherwise
         """
         try:
-            url = f"{self.base_url}/api/v2"
-            response = self.session.get(url, timeout=10)
+            # Test by fetching 1 customer - this validates auth and connectivity
+            url = f"{self.base_url}/api/v2/odata/{self.company}/Erp.BO.CustomerSvc/Customers?$top=1"
+            response = self.session.get(url, timeout=15)
             response.raise_for_status()
             self.logger.info("✓ Epicor connection successful")
             return True

@@ -20,7 +20,7 @@ from typing import Dict, Any
 from datetime import datetime
 
 from src.transformers.base_transformer import BaseTransformer
-from src.utils.date_utils import epicor_datetime_to_unix_ms, guid_to_string
+from src.utils.date_utils import epicor_date_to_midnight_utc, guid_to_string
 from src.config import Pipelines
 
 
@@ -36,6 +36,25 @@ class OrderStageLogic:
     - OrderHeld
     - TotalShipped
     """
+
+    # HubSpot Stage ID mapping (internal name -> HubSpot stage ID)
+    # Orders pipeline uses HubSpot default stage IDs
+    STAGE_ID_MAP = {
+        'order_received': 'appointmentscheduled',      # New order
+        'order_held': 'qualifiedtobuy',                # On hold
+        'partially_shipped': 'presentationscheduled',  # In progress
+        'completed': 'closedwon',                      # Fully shipped
+        'cancelled': 'closedlost',                     # Voided
+    }
+
+    @staticmethod
+    def get_stage_id(stage_name: str) -> str:
+        """Convert internal stage name to HubSpot stage ID."""
+        stage_id = OrderStageLogic.STAGE_ID_MAP.get(stage_name.lower())
+        if not stage_id:
+            logger.warning(f"Unknown order stage name '{stage_name}', using as-is")
+            return stage_name
+        return stage_id
 
     @staticmethod
     def get_stage_from_epicor(order_data: Dict[str, Any]) -> str:
@@ -136,6 +155,7 @@ class OrderTransformer(BaseTransformer):
 
         # Derive stage from Epicor data (uses VoidOrder, OrderHeld internally)
         stage = OrderStageLogic.get_stage_from_epicor(order_data)
+        stage_id = OrderStageLogic.get_stage_id(stage)
 
         # Build properties (13 fields)
         properties = {
@@ -146,17 +166,17 @@ class OrderTransformer(BaseTransformer):
             # 13. Pipeline
             'pipeline': Pipelines.get_orders_pipeline_id(),
 
-            # Stage (derived from deleted fields)
-            'dealstage': stage,
+            # Stage (derived from deleted fields, converted to HubSpot stage ID)
+            'dealstage': stage_id,
 
-            # 4-6. Dates
-            'createdate': epicor_datetime_to_unix_ms(
+            # 4-6. Dates (midnight UTC for HubSpot date properties)
+            'createdate': epicor_date_to_midnight_utc(
                 self.safe_get(order_data, 'OrderDate')
             ),
-            'closedate': epicor_datetime_to_unix_ms(
+            'closedate': epicor_date_to_midnight_utc(
                 self.safe_get(order_data, 'RequestDate')
             ),
-            'need_by_date': epicor_datetime_to_unix_ms(
+            'need_by_date': epicor_date_to_midnight_utc(
                 self.safe_get(order_data, 'NeedByDate')
             ),
 
@@ -176,8 +196,8 @@ class OrderTransformer(BaseTransformer):
                 self.safe_get(order_data, 'SysRowID')
             ),
 
-            # Sync metadata
-            'epicor_last_sync_timestamp': int(datetime.now().timestamp() * 1000)
+            # Sync metadata (midnight UTC for datepicker properties)
+            'epicor_last_sync_timestamp': self._get_today_midnight_utc(),
         }
 
         # Remove None values

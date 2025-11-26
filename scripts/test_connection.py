@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Test API connections for Epicor and HubSpot.
 
@@ -30,7 +31,7 @@ def main():
 
     try:
         # Load settings
-        print("=Ë Loading configuration...")
+        print("== Loading configuration...")
         settings = get_settings()
         print(f"   Environment: {settings.environment}")
         print(f"   Epicor Company: {settings.epicor_company}")
@@ -59,7 +60,7 @@ def main():
 
             # Try fetching a small sample
             try:
-                print("   =Ê Fetching sample data (1 customer)...")
+                print("   =ï¿½ Fetching sample data (1 customer)...")
                 customers = epicor_client.get_entity(
                     "Erp.BO.CustomerSvc",
                     "Customers",
@@ -69,7 +70,7 @@ def main():
                 if customers:
                     print(f"   Sample: {customers[0].get('Name', 'N/A')}")
             except Exception as e:
-                print(f"      Sample fetch failed: {e}")
+                print(f"   ï¿½  Sample fetch failed: {e}")
         else:
             print("   L Epicor connection FAILED")
 
@@ -91,7 +92,7 @@ def main():
 
             # Try fetching a small sample
             try:
-                print("   =Ê Fetching sample data (1 company)...")
+                print("   =ï¿½ Fetching sample data (1 company)...")
                 companies = hubspot_client.search_objects(
                     "companies",
                     filter_groups=[],
@@ -102,7 +103,7 @@ def main():
                     props = companies[0].get('properties', {})
                     print(f"   Sample: {props.get('name', 'N/A')}")
             except Exception as e:
-                print(f"      Sample fetch failed: {e}")
+                print(f"   ï¿½  Sample fetch failed: {e}")
         else:
             print("   L HubSpot connection FAILED")
 

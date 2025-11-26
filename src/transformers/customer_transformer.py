@@ -3,15 +3,15 @@ Customer to Company transformer.
 Transforms Epicor Customer records to HubSpot Company records.
 
 MAPPING (14 ACTIVE FIELDS):
-1. CustNum ’ epicor_customer_number (PRIMARY MATCHING)
-2. CustID ’ epicor_customer_code
-3. Name ’ name (required)
-4-9. Address fields ’ address, address2, city, state, zip, country
-10. PhoneNum ’ phone (E.164 format)
-11. FaxNum ’ fax_number
-12. EmailAddress ’ epicor_email
-13. CurrencyCode ’ currency_code
-14. SysRowID ’ epicor_sysrowid (GUID’string)
+1. CustNum -> epicor_customer_number (PRIMARY MATCHING)
+2. CustID -> epicor_customer_code
+3. Name -> name (required)
+4-9. Address fields -> address, address2, city, state, zip, country
+10. PhoneNum -> phone (E.164 format)
+11. FaxNum -> fax_number
+12. EmailAddress -> epicor_email
+13. CurrencyCode -> currency_code
+14. SysRowID -> epicor_sysrowid (GUID->string)
 
 DELETED (DO NOT SYNC):
 - TermsCode

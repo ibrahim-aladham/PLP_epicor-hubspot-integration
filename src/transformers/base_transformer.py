@@ -3,6 +3,7 @@ Base transformer class for data transformation.
 """
 
 import logging
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 from abc import ABC, abstractmethod
 
@@ -67,3 +68,16 @@ class BaseTransformer(ABC):
             return False
 
         return True
+
+    def _get_today_midnight_utc(self) -> int:
+        """
+        Get today's date at midnight UTC as Unix milliseconds.
+
+        HubSpot datepicker properties require timestamps at midnight UTC.
+
+        Returns:
+            Unix timestamp in milliseconds for today at 00:00:00 UTC
+        """
+        now = datetime.now(timezone.utc)
+        midnight = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=timezone.utc)
+        return int(midnight.timestamp() * 1000)

@@ -162,6 +162,56 @@ def format_datetime(date_str: Optional[str], fmt: str = '%Y-%m-%d %H:%M:%S') -> 
 epicor_datetime_to_unix_ms = epicor_to_unix_ms
 
 
+def epicor_date_to_midnight_utc(date_str: Optional[str]) -> Optional[int]:
+    """
+    Convert Epicor date string to Unix milliseconds at midnight UTC.
+
+    HubSpot date-only properties (like closedate, createdate) require timestamps
+    to be set at midnight UTC (00:00:00.000 UTC) for that date.
+
+    Args:
+        date_str: ISO 8601 datetime string from Epicor
+
+    Returns:
+        Unix timestamp in milliseconds at midnight UTC, or None if input is None/invalid
+
+    Examples:
+        >>> epicor_date_to_midnight_utc("2024-01-15T14:30:00Z")
+        1705276800000  # Midnight UTC on 2024-01-15
+        >>> epicor_date_to_midnight_utc("2024-01-15")
+        1705276800000  # Midnight UTC on 2024-01-15
+        >>> epicor_date_to_midnight_utc(None)
+        None
+    """
+    if not date_str:
+        return None
+
+    try:
+        # Handle various date formats
+        if date_str.endswith('Z'):
+            date_str = date_str.replace('Z', '+00:00')
+
+        # Check if it's just a date (no time component)
+        if 'T' not in date_str and len(date_str) <= 10:
+            # Parse date-only string
+            dt = datetime.strptime(date_str[:10], '%Y-%m-%d')
+        else:
+            # Parse full datetime
+            has_timezone = '+' in date_str or date_str.count('-') > 2
+            if not has_timezone:
+                date_str = date_str + '+00:00'
+            dt = datetime.fromisoformat(date_str)
+
+        # Create a new datetime at midnight UTC for that date
+        midnight_utc = datetime(dt.year, dt.month, dt.day, 0, 0, 0, tzinfo=timezone.utc)
+
+        return int(midnight_utc.timestamp() * 1000)
+
+    except (ValueError, AttributeError) as e:
+        logger.warning(f"Failed to parse date '{date_str}' for midnight UTC conversion: {e}")
+        return None
+
+
 def guid_to_string(guid: Optional[str]) -> Optional[str]:
     """
     Convert GUID to string (removes hyphens and formats consistently).

@@ -253,3 +253,89 @@ def safe_get(dictionary: dict, *keys, default: Any = None) -> Any:
         else:
             return default
     return result if result is not None else default
+
+
+# ============================================================================
+# Error Tracker Class
+# ============================================================================
+
+class ErrorTracker:
+    """
+    Track errors and warnings during sync operations.
+
+    Collects errors and warnings for reporting after batch operations complete.
+
+    Example:
+        >>> tracker = ErrorTracker()
+        >>> tracker.add_error('customer', 123, 'Failed to sync')
+        >>> tracker.add_warning('quote', 456, 'Missing field')
+        >>> print(tracker.has_errors())
+        True
+        >>> print(tracker.get_summary())
+    """
+
+    def __init__(self):
+        """Initialize empty error and warning lists."""
+        self.errors = []
+        self.warnings = []
+
+    def add_error(self, entity_type: str, identifier: Any, message: str) -> None:
+        """
+        Add an error to the tracker.
+
+        Args:
+            entity_type: Type of entity (e.g., 'customer', 'quote', 'order')
+            identifier: Identifier of the entity (e.g., CustNum, QuoteNum)
+            message: Error message
+        """
+        error_entry = {
+            'type': entity_type,
+            'id': identifier,
+            'message': message
+        }
+        self.errors.append(error_entry)
+        logger.error(f"[{entity_type}:{identifier}] {message}")
+
+    def add_warning(self, entity_type: str, identifier: Any, message: str) -> None:
+        """
+        Add a warning to the tracker.
+
+        Args:
+            entity_type: Type of entity (e.g., 'customer', 'quote', 'order')
+            identifier: Identifier of the entity
+            message: Warning message
+        """
+        warning_entry = {
+            'type': entity_type,
+            'id': identifier,
+            'message': message
+        }
+        self.warnings.append(warning_entry)
+        logger.warning(f"[{entity_type}:{identifier}] {message}")
+
+    def has_errors(self) -> bool:
+        """Return True if any errors have been recorded."""
+        return len(self.errors) > 0
+
+    def has_warnings(self) -> bool:
+        """Return True if any warnings have been recorded."""
+        return len(self.warnings) > 0
+
+    def get_summary(self) -> dict:
+        """
+        Get a summary of all errors and warnings.
+
+        Returns:
+            Dictionary with error and warning counts and details
+        """
+        return {
+            'error_count': len(self.errors),
+            'warning_count': len(self.warnings),
+            'errors': self.errors,
+            'warnings': self.warnings
+        }
+
+    def clear(self) -> None:
+        """Clear all errors and warnings."""
+        self.errors = []
+        self.warnings = []

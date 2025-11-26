@@ -24,7 +24,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 
 from src.transformers.base_transformer import BaseTransformer
-from src.utils.date_utils import epicor_datetime_to_unix_ms, guid_to_string
+from src.utils.date_utils import epicor_date_to_midnight_utc, guid_to_string
 from src.config import settings, Pipelines
 
 
@@ -47,10 +47,42 @@ class QuoteStageLogic:
         'closedlost': 7
     }
 
+    # HubSpot Stage ID mapping (internal name -> HubSpot stage ID)
+    # These IDs are specific to the PLP Canada HubSpot account
+    STAGE_ID_MAP = {
+        'quote_created': '2008968141',
+        'technical_review': '2008968142',
+        'quote_sent': '2008968143',
+        'follow_up': '2008968144',
+        'quote_expired': '2008968145',
+        'closedwon': '2008968146',
+        'closedlost': '2008968147',
+        # Aliases
+        'closed_won': '2008968146',
+        'closed_lost': '2008968147',
+    }
+
+    # Reverse mapping (HubSpot stage ID -> internal name)
+    STAGE_NAME_MAP = {v: k for k, v in STAGE_ID_MAP.items() if not k.startswith('closed_')}
+
     TERMINAL_STAGES = {'closedwon', 'closedlost', 'quote_expired'}
     PERMANENT_TERMINAL_STAGES = {'closedwon', 'closedlost'}
     REVERSIBLE_TERMINAL_STAGES = {'quote_expired'}
     HUBSPOT_ONLY_STAGES = {'technical_review', 'follow_up'}
+
+    @staticmethod
+    def get_stage_id(stage_name: str) -> str:
+        """Convert internal stage name to HubSpot stage ID."""
+        stage_id = QuoteStageLogic.STAGE_ID_MAP.get(stage_name.lower())
+        if not stage_id:
+            logger.warning(f"Unknown stage name '{stage_name}', using as-is")
+            return stage_name
+        return stage_id
+
+    @staticmethod
+    def get_stage_name(stage_id: str) -> str:
+        """Convert HubSpot stage ID to internal stage name."""
+        return QuoteStageLogic.STAGE_NAME_MAP.get(stage_id, stage_id)
 
     @staticmethod
     def get_stage_from_epicor(quote_data: Dict[str, Any]) -> str:
@@ -99,15 +131,15 @@ class QuoteStageLogic:
         Determine if HubSpot stage should be updated.
 
         RULES:
-        1. New deal � always set stage
-        2. Terminal stages from Epicor � always update
-        3. Permanent terminals (Won/Lost) � cannot reopen
-        4. Reversible terminal (Expired) � can reactivate
-        5. Forward only � never move backward
+        1. New deal -> always set stage
+        2. Terminal stages from Epicor -> always update
+        3. Permanent terminals (Won/Lost) -> cannot reopen
+        4. Reversible terminal (Expired) -> can reactivate
+        5. Forward only -> never move backward
 
         Args:
-            current_hubspot_stage: Current stage in HubSpot (None if new deal)
-            new_epicor_stage: New stage derived from Epicor
+            current_hubspot_stage: Current stage in HubSpot (None if new deal) - can be stage ID or name
+            new_epicor_stage: New stage derived from Epicor (internal name)
 
         Returns:
             True if stage should be updated
@@ -117,7 +149,8 @@ class QuoteStageLogic:
             logger.debug("New deal - setting initial stage")
             return True
 
-        current = current_hubspot_stage.lower().strip()
+        # Convert HubSpot stage ID to internal name if needed
+        current = QuoteStageLogic.get_stage_name(current_hubspot_stage).lower().strip()
         new = new_epicor_stage.lower().strip()
 
         # Rule 2: Terminal stages from Epicor always win
@@ -231,17 +264,17 @@ class QuoteTransformer(BaseTransformer):
             # 21. Pipeline
             'pipeline': Pipelines.get_quotes_pipeline_id(),
 
-            # 4-7. Dates
-            'createdate': epicor_datetime_to_unix_ms(
+            # 4-7. Dates (midnight UTC for HubSpot date properties)
+            'createdate': epicor_date_to_midnight_utc(
                 self.safe_get(quote_data, 'EntryDate')
             ),
-            'closedate': epicor_datetime_to_unix_ms(
+            'closedate': epicor_date_to_midnight_utc(
                 self.safe_get(quote_data, 'DueDate')
             ),
-            'quote_expiration_date': epicor_datetime_to_unix_ms(
+            'quote_expiration_date': epicor_date_to_midnight_utc(
                 self.safe_get(quote_data, 'ExpirationDate')
             ),
-            'quote_sent_date': epicor_datetime_to_unix_ms(
+            'quote_sent_date': epicor_date_to_midnight_utc(
                 self.safe_get(quote_data, 'DateQuoted')
             ),
 
@@ -268,16 +301,17 @@ class QuoteTransformer(BaseTransformer):
                 self.safe_get(quote_data, 'SysRowID')
             ),
 
-            # Sync metadata
+            # Sync metadata (midnight UTC for datepicker properties)
             'epicor_last_sync_stage': new_stage,
-            'epicor_last_sync_timestamp': int(datetime.now().timestamp() * 1000)
+            'epicor_last_sync_timestamp': self._get_today_midnight_utc(),
         }
 
-        # 11. Add stage if should update
+        # 11. Add stage if should update (convert to HubSpot stage ID)
         if should_update:
-            properties['dealstage'] = new_stage
+            stage_id = QuoteStageLogic.get_stage_id(new_stage)
+            properties['dealstage'] = stage_id
             action = 'set to' if current_hubspot_stage is None else 'updated to'
-            logger.info(f"Quote {quote_data['QuoteNum']}: Stage {action} '{new_stage}'")
+            logger.info(f"Quote {quote_data['QuoteNum']}: Stage {action} '{new_stage}' (ID: {stage_id})")
         else:
             logger.info(
                 f"Quote {quote_data['QuoteNum']}: "
