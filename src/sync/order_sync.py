@@ -161,7 +161,7 @@ class OrderSync:
             result = self.hubspot.update_deal(deal_id, properties)
             if result:
                 logger.info(f"✅ Updated order {order_num}")
-                return 'updated'
+                action = 'updated'
             else:
                 logger.error(f"❌ Failed to update order {order_num}")
                 self.error_tracker.add_error('order', order_num, "HubSpot update failed")
@@ -172,16 +172,17 @@ class OrderSync:
             if result:
                 deal_id = result['id']
                 logger.info(f"✅ Created order {order_num}")
-
-                # Associate with company
-                assoc_result = self.hubspot.associate_deal_to_company(deal_id, company_id)
-                if assoc_result:
-                    logger.debug(f"Associated order {order_num} to company {customer_num}")
-                else:
-                    logger.warning(f"Failed to associate order {order_num} to company")
-
-                return 'created'
+                action = 'created'
             else:
                 logger.error(f"❌ Failed to create order {order_num}")
                 self.error_tracker.add_error('order', order_num, "HubSpot create failed")
                 return 'error'
+
+        # Always ensure association exists (for both create and update)
+        try:
+            self.hubspot.associate_deal_to_company(deal_id, company_id)
+            logger.debug(f"Associated order {order_num} to company {customer_num}")
+        except Exception as e:
+            logger.warning(f"Failed to associate order {order_num} to company: {e}")
+
+        return action

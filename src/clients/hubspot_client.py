@@ -294,6 +294,88 @@ class HubSpotClient:
         return True
 
     # ========================================================================
+    # Convenience Methods for Common Operations
+    # ========================================================================
+
+    def get_deal_by_property(
+        self,
+        property_name: str,
+        value: Any
+    ) -> Optional[Dict]:
+        """
+        Find a deal by a specific property value.
+
+        Args:
+            property_name: Property to search by (e.g., 'epicor_quote_number')
+            value: Value to match
+
+        Returns:
+            Deal object if found, None otherwise
+        """
+        results = self.search_objects(
+            "deals",
+            [{"filters": [{"propertyName": property_name, "operator": "EQ", "value": str(value)}]}],
+            properties=["dealname", "dealstage", "pipeline", "amount"]
+        )
+        return results[0] if results else None
+
+    def get_company_by_property(
+        self,
+        property_name: str,
+        value: Any
+    ) -> Optional[Dict]:
+        """
+        Find a company by a specific property value.
+
+        Args:
+            property_name: Property to search by (e.g., 'epicor_customer_number')
+            value: Value to match
+
+        Returns:
+            Company object if found, None otherwise
+        """
+        results = self.search_objects(
+            "companies",
+            [{"filters": [{"propertyName": property_name, "operator": "EQ", "value": str(value)}]}]
+        )
+        return results[0] if results else None
+
+    def create_deal(self, properties: Dict[str, Any]) -> Optional[Dict]:
+        """Create a deal. Convenience wrapper around create_object."""
+        return self.create_object("deals", properties)
+
+    def update_deal(self, deal_id: str, properties: Dict[str, Any]) -> Optional[Dict]:
+        """Update a deal. Convenience wrapper around update_object."""
+        return self.update_object("deals", deal_id, properties)
+
+    def create_company(self, properties: Dict[str, Any]) -> Optional[Dict]:
+        """Create a company. Convenience wrapper around create_object."""
+        return self.create_object("companies", properties)
+
+    def update_company(self, company_id: str, properties: Dict[str, Any]) -> Optional[Dict]:
+        """Update a company. Convenience wrapper around update_object."""
+        return self.update_object("companies", company_id, properties)
+
+    def associate_deal_to_company(self, deal_id: str, company_id: str) -> bool:
+        """
+        Associate a deal with a company.
+
+        Args:
+            deal_id: HubSpot deal ID
+            company_id: HubSpot company ID
+
+        Returns:
+            True if successful
+        """
+        return self.create_association(
+            from_object="deals",
+            from_id=deal_id,
+            to_object="companies",
+            to_id=company_id,
+            association_type_id=5  # deal_to_company
+        )
+
+    # ========================================================================
     # Connection Test
     # ========================================================================
 

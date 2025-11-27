@@ -238,6 +238,79 @@ class EpicorClient:
         else:
             return self._get_paged(url)
 
+    # ========================================================================
+    # Convenience Methods for Common Entities
+    # ========================================================================
+
+    def get_customers(
+        self,
+        filter_condition: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch customers from Epicor.
+
+        Args:
+            filter_condition: Optional OData filter expression
+
+        Returns:
+            List of customer records
+        """
+        return self.get_entity(
+            service="Erp.BO.CustomerSvc",
+            entity_set="Customers",
+            filter_expr=filter_condition
+        )
+
+    def get_quotes(
+        self,
+        expand_line_items: bool = False,
+        filter_condition: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch quotes from Epicor.
+
+        Args:
+            expand_line_items: Whether to include quote line items
+            filter_condition: Optional OData filter expression
+
+        Returns:
+            List of quote records
+        """
+        expand = "QuoteDtls" if expand_line_items else None
+        return self.get_entity(
+            service="Erp.BO.QuoteSvc",
+            entity_set="Quotes",
+            expand=expand,
+            filter_expr=filter_condition
+        )
+
+    def get_orders(
+        self,
+        expand_line_items: bool = False,
+        filter_condition: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch sales orders from Epicor.
+
+        Args:
+            expand_line_items: Whether to include order line items
+            filter_condition: Optional OData filter expression
+
+        Returns:
+            List of order records
+        """
+        expand = "OrderDtls" if expand_line_items else None
+        return self.get_entity(
+            service="Erp.BO.SalesOrderSvc",
+            entity_set="SalesOrders",
+            expand=expand,
+            filter_expr=filter_condition
+        )
+
+    # ========================================================================
+    # Connection Test
+    # ========================================================================
+
     def test_connection(self) -> bool:
         """
         Test API connection by fetching one customer record.

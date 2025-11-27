@@ -32,25 +32,25 @@ from src.utils.logger import setup_logging
 
 # Customer mapping: CustNum -> HubSpot Company ID
 CUSTOMER_HUBSPOT_MAP = {
-    # 7: "128438254552",   # Westower Communications - Anjo
-    # 8: "127813962684",   # Bell Canada - Pembroke
-    # 9: "127806761926",   # Apt Prophet Technologies
-    # 10: "127830066129",  # TVC Communications Canada
-    # 11: "127804962762",  # Advanced Tower Services (2007)
-    # 12: "128387920862",  # Amtelecom Inc.
-    # 13: "127835488188",  # Andec Agencies Ltd.
-    # 14: "128340951997",  # Preformed Line Products (Spain)
-    # 15: "128387920863",  # MTS Allstream Inc.
-    # 16: "127833670605",  # Bell Canada
-    # 17: "128387920864",  # Anixter Power Solutions Canada
-    # 18: "127830066133",  # Burlington H.E.C.
-    # 19: "127837257708",  # GrandBridge Energy
-    # 20: "127806761929",  # Canadian Niagara Power Co.
-    # 21: "127812189170",  # CapTel Inc.
-    # 22: "127835488191",  # City of Thunder Bay
-    # 23: "127828253678",  # Communications & Cabling Contr
-    # 29: "127828253679",  # Bell - London
-    # 30: "127828253680",  # Expertech - Newmarket
+    7: "128438254552",   # Westower Communications - Anjo
+    8: "127813962684",   # Bell Canada - Pembroke
+    9: "127806761926",   # Apt Prophet Technologies
+    10: "127830066129",  # TVC Communications Canada
+    11: "127804962762",  # Advanced Tower Services (2007)
+    12: "128387920862",  # Amtelecom Inc.
+    13: "127835488188",  # Andec Agencies Ltd.
+    14: "128340951997",  # Preformed Line Products (Spain)
+    15: "128387920863",  # MTS Allstream Inc.
+    16: "127833670605",  # Bell Canada
+    17: "128387920864",  # Anixter Power Solutions Canada
+    18: "127830066133",  # Burlington H.E.C.
+    19: "127837257708",  # GrandBridge Energy
+    20: "127806761929",  # Canadian Niagara Power Co.
+    21: "127812189170",  # CapTel Inc.
+    22: "127835488191",  # City of Thunder Bay
+    23: "127828253678",  # Communications & Cabling Contr
+    29: "127828253679",  # Bell - London
+    30: "127828253680",  # Expertech - Newmarket
     31: "127835488193",  # Expertech - Purchasing
 }
 

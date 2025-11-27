@@ -166,7 +166,7 @@ class QuoteSync:
             result = self.hubspot.update_deal(deal_id, properties)
             if result:
                 logger.info(f"✅ Updated quote {quote_num}")
-                return 'updated'
+                action = 'updated'
             else:
                 logger.error(f"❌ Failed to update quote {quote_num}")
                 self.error_tracker.add_error('quote', quote_num, "HubSpot update failed")
@@ -177,16 +177,17 @@ class QuoteSync:
             if result:
                 deal_id = result['id']
                 logger.info(f"✅ Created quote {quote_num}")
-
-                # Associate with company
-                assoc_result = self.hubspot.associate_deal_to_company(deal_id, company_id)
-                if assoc_result:
-                    logger.debug(f"Associated quote {quote_num} to company {customer_num}")
-                else:
-                    logger.warning(f"Failed to associate quote {quote_num} to company")
-
-                return 'created'
+                action = 'created'
             else:
                 logger.error(f"❌ Failed to create quote {quote_num}")
                 self.error_tracker.add_error('quote', quote_num, "HubSpot create failed")
                 return 'error'
+
+        # Always ensure association exists (for both create and update)
+        try:
+            self.hubspot.associate_deal_to_company(deal_id, company_id)
+            logger.debug(f"Associated quote {quote_num} to company {customer_num}")
+        except Exception as e:
+            logger.warning(f"Failed to associate quote {quote_num} to company: {e}")
+
+        return action
