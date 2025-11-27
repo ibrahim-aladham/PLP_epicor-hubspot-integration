@@ -28,6 +28,7 @@ from src.clients.epicor_client import EpicorClient
 from src.clients.hubspot_client import HubSpotClient
 from src.transformers.quote_transformer import QuoteTransformer
 from src.transformers.order_transformer import OrderTransformer
+from src.sync.line_item_sync import LineItemSync
 from src.utils.logger import setup_logging
 
 # Customer mapping: CustNum -> HubSpot Company ID
@@ -61,7 +62,7 @@ MAX_QUOTES_PER_CUSTOMER = 5
 MAX_ORDERS_PER_CUSTOMER = 5
 
 
-def sync_quotes(epicor_client, hubspot_client, settings):
+def sync_quotes(epicor_client, hubspot_client, line_item_sync, settings):
     """Sync quotes for the specified customers."""
     print("\n" + "=" * 70)
     print("SYNCING QUOTES")
@@ -70,7 +71,7 @@ def sync_quotes(epicor_client, hubspot_client, settings):
     transformer = QuoteTransformer()
     pipeline_id = settings.hubspot_quotes_pipeline_id
 
-    stats = {'created': 0, 'updated': 0, 'skipped': 0, 'errors': 0}
+    stats = {'created': 0, 'updated': 0, 'skipped': 0, 'errors': 0, 'line_items': 0}
 
     # Build filter for customer numbers
     cust_filter = " or ".join([f"CustNum eq {c}" for c in CUSTOMER_NUMS])
@@ -171,6 +172,18 @@ def sync_quotes(epicor_client, hubspot_client, settings):
             except Exception as e:
                 print(f"           -> Association failed: {e}")
 
+            # Sync line items if present
+            line_items = quote.get('QuoteDtls', [])
+            if line_items:
+                try:
+                    li_summary = line_item_sync.sync_quote_line_items(deal_id, line_items, quote_num)
+                    stats['line_items'] += li_summary['created'] + li_summary.get('updated', 0)
+                    print(f"           -> Line items: {li_summary['created']} created, {li_summary.get('updated', 0)} updated")
+                    if li_summary.get('products_created', 0) > 0:
+                        print(f"           -> Products auto-created: {li_summary['products_created']}")
+                except Exception as e:
+                    print(f"           -> Line items failed: {e}")
+
         except Exception as e:
             stats['errors'] += 1
             # Show full error details
@@ -181,12 +194,12 @@ def sync_quotes(epicor_client, hubspot_client, settings):
             print(f"           {error_msg[:500]}")
 
     print("-" * 70)
-    print(f"Quotes: {stats['created']} created, {stats['updated']} updated, {stats['skipped']} skipped, {stats['errors']} errors")
+    print(f"Quotes: {stats['created']} created, {stats['updated']} updated, {stats['skipped']} skipped, {stats['errors']} errors, {stats['line_items']} line items")
 
     return stats
 
 
-def sync_orders(epicor_client, hubspot_client, settings):
+def sync_orders(epicor_client, hubspot_client, line_item_sync, settings):
     """Sync orders for the specified customers."""
     print("\n" + "=" * 70)
     print("SYNCING ORDERS")
@@ -195,7 +208,7 @@ def sync_orders(epicor_client, hubspot_client, settings):
     transformer = OrderTransformer()
     pipeline_id = settings.hubspot_orders_pipeline_id
 
-    stats = {'created': 0, 'updated': 0, 'skipped': 0, 'errors': 0}
+    stats = {'created': 0, 'updated': 0, 'skipped': 0, 'errors': 0, 'line_items': 0}
 
     # Build filter for customer numbers
     cust_filter = " or ".join([f"CustNum eq {c}" for c in CUSTOMER_NUMS])
@@ -279,6 +292,18 @@ def sync_orders(epicor_client, hubspot_client, settings):
             except Exception as e:
                 print(f"           -> Association failed: {e}")
 
+            # Sync line items if present
+            line_items = order.get('OrderDtls', [])
+            if line_items:
+                try:
+                    li_summary = line_item_sync.sync_order_line_items(deal_id, line_items, order_num)
+                    stats['line_items'] += li_summary['created'] + li_summary.get('updated', 0)
+                    print(f"           -> Line items: {li_summary['created']} created, {li_summary.get('updated', 0)} updated")
+                    if li_summary.get('products_created', 0) > 0:
+                        print(f"           -> Products auto-created: {li_summary['products_created']}")
+                except Exception as e:
+                    print(f"           -> Line items failed: {e}")
+
         except Exception as e:
             stats['errors'] += 1
             error_msg = str(e)
@@ -288,7 +313,7 @@ def sync_orders(epicor_client, hubspot_client, settings):
             print(f"           {error_msg[:200]}")
 
     print("-" * 70)
-    print(f"Orders: {stats['created']} created, {stats['updated']} updated, {stats['skipped']} skipped, {stats['errors']} errors")
+    print(f"Orders: {stats['created']} created, {stats['updated']} updated, {stats['skipped']} skipped, {stats['errors']} errors, {stats['line_items']} line items")
 
     return stats
 
@@ -326,6 +351,8 @@ def main():
     hubspot_client = HubSpotClient(
         api_key=settings.hubspot_api_key
     )
+
+    line_item_sync = LineItemSync(hubspot_client)
     print("      Clients initialized")
 
     # Test connections
@@ -358,26 +385,28 @@ def main():
 
     # Sync quotes
     print("\n[5/5] Syncing data...")
-    quote_stats = sync_quotes(epicor_client, hubspot_client, settings)
+    quote_stats = sync_quotes(epicor_client, hubspot_client, line_item_sync, settings)
 
     # Sync orders
-    order_stats = sync_orders(epicor_client, hubspot_client, settings)
+    order_stats = sync_orders(epicor_client, hubspot_client, line_item_sync, settings)
 
     # Final summary
     print("\n" + "=" * 70)
     print("SYNC COMPLETE - SUMMARY")
     print("=" * 70)
     print(f"\nQUOTES:")
-    print(f"  Created: {quote_stats['created']}")
-    print(f"  Updated: {quote_stats['updated']}")
-    print(f"  Skipped: {quote_stats['skipped']}")
-    print(f"  Errors:  {quote_stats['errors']}")
+    print(f"  Created:    {quote_stats['created']}")
+    print(f"  Updated:    {quote_stats['updated']}")
+    print(f"  Skipped:    {quote_stats['skipped']}")
+    print(f"  Errors:     {quote_stats['errors']}")
+    print(f"  Line Items: {quote_stats['line_items']}")
 
     print(f"\nORDERS:")
-    print(f"  Created: {order_stats['created']}")
-    print(f"  Updated: {order_stats['updated']}")
-    print(f"  Skipped: {order_stats['skipped']}")
-    print(f"  Errors:  {order_stats['errors']}")
+    print(f"  Created:    {order_stats['created']}")
+    print(f"  Updated:    {order_stats['updated']}")
+    print(f"  Skipped:    {order_stats['skipped']}")
+    print(f"  Errors:     {order_stats['errors']}")
+    print(f"  Line Items: {order_stats['line_items']}")
 
     print("\n" + "=" * 70)
 

@@ -29,16 +29,25 @@ class LineItemTransformer(BaseTransformer):
             "Use transform_quote_line or transform_order_line instead"
         )
 
-    def transform_quote_line(self, line_data: Dict[str, Any]) -> Dict[str, Any]:
+    def transform_quote_line(
+        self,
+        line_data: Dict[str, Any],
+        quote_num: int = None
+    ) -> Dict[str, Any]:
         """
         Transform QuoteDtl to HubSpot line item properties.
 
         Args:
             line_data: Epicor QuoteDtl record
+            quote_num: Quote number (if not in line_data)
 
         Returns:
             HubSpot line item properties
         """
+        # Get quote number and line number for unique ID
+        q_num = quote_num or self.safe_get(line_data, 'QuoteNum')
+        q_line = self.safe_get(line_data, 'QuoteLine')
+
         properties = {
             'sku': self.safe_get(line_data, 'PartNum'),
             'name': self.safe_get(line_data, 'LineDesc') or f"Part {line_data.get('PartNum', '')}",
@@ -47,23 +56,36 @@ class LineItemTransformer(BaseTransformer):
             'amount': self.safe_get(line_data, 'DocExtPriceDtl', 0)
         }
 
+        # Add unique identifier for upsert logic
+        if q_num and q_line:
+            properties['epicor_line_item_id'] = f"Q{q_num}-{q_line}"
+
         # Remove None values
         properties = {k: v for k, v in properties.items() if v is not None}
 
-        logger.debug(f"Transformed quote line: {properties.get('sku')}")
+        logger.debug(f"Transformed quote line: {properties.get('sku')} ({properties.get('epicor_line_item_id')})")
 
         return properties
 
-    def transform_order_line(self, line_data: Dict[str, Any]) -> Dict[str, Any]:
+    def transform_order_line(
+        self,
+        line_data: Dict[str, Any],
+        order_num: int = None
+    ) -> Dict[str, Any]:
         """
         Transform OrderDtl to HubSpot line item properties.
 
         Args:
             line_data: Epicor OrderDtl record
+            order_num: Order number (if not in line_data)
 
         Returns:
             HubSpot line item properties
         """
+        # Get order number and line number for unique ID
+        o_num = order_num or self.safe_get(line_data, 'OrderNum')
+        o_line = self.safe_get(line_data, 'OrderLine')
+
         properties = {
             'sku': self.safe_get(line_data, 'PartNum'),
             'name': self.safe_get(line_data, 'LineDesc') or f"Part {line_data.get('PartNum', '')}",
@@ -72,10 +94,14 @@ class LineItemTransformer(BaseTransformer):
             'amount': self.safe_get(line_data, 'DocExtPriceDtl', 0)
         }
 
+        # Add unique identifier for upsert logic
+        if o_num and o_line:
+            properties['epicor_line_item_id'] = f"O{o_num}-{o_line}"
+
         # Remove None values
         properties = {k: v for k, v in properties.items() if v is not None}
 
-        logger.debug(f"Transformed order line: {properties.get('sku')}")
+        logger.debug(f"Transformed order line: {properties.get('sku')} ({properties.get('epicor_line_item_id')})")
 
         return properties
 

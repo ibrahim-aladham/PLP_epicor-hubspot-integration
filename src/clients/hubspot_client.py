@@ -375,6 +375,97 @@ class HubSpotClient:
             association_type_id=5  # deal_to_company
         )
 
+    def associate_deal_to_deal(self, from_deal_id: str, to_deal_id: str) -> bool:
+        """
+        Associate two deals together (e.g., Quote deal to Order deal).
+
+        Args:
+            from_deal_id: Source deal ID (e.g., quote deal)
+            to_deal_id: Target deal ID (e.g., order deal)
+
+        Returns:
+            True if successful
+        """
+        return self.create_association(
+            from_object="deals",
+            from_id=from_deal_id,
+            to_object="deals",
+            to_id=to_deal_id,
+            association_type_id=6  # deal_to_deal
+        )
+
+    # ========================================================================
+    # Line Item Methods
+    # ========================================================================
+
+    def create_line_item(self, properties: Dict[str, Any]) -> Optional[Dict]:
+        """Create a line item. Convenience wrapper around create_object."""
+        return self.create_object("line_items", properties)
+
+    def associate_line_item_to_deal(self, line_item_id: str, deal_id: str) -> bool:
+        """
+        Associate a line item with a deal.
+
+        Args:
+            line_item_id: HubSpot line item ID
+            deal_id: HubSpot deal ID
+
+        Returns:
+            True if successful
+        """
+        return self.create_association(
+            from_object="line_items",
+            from_id=line_item_id,
+            to_object="deals",
+            to_id=deal_id,
+            association_type_id=20  # line_item_to_deal
+        )
+
+    def get_line_item_by_epicor_id(self, epicor_line_item_id: str) -> Optional[Dict]:
+        """
+        Find a line item by its Epicor unique identifier.
+
+        Args:
+            epicor_line_item_id: Unique ID (e.g., 'Q1234-1' or 'O5678-2')
+
+        Returns:
+            Line item object if found, None otherwise
+        """
+        results = self.search_objects(
+            "line_items",
+            [{"filters": [{"propertyName": "epicor_line_item_id", "operator": "EQ", "value": epicor_line_item_id}]}],
+            properties=["name", "sku", "quantity", "price", "amount", "epicor_line_item_id"]
+        )
+        return results[0] if results else None
+
+    def update_line_item(self, line_item_id: str, properties: Dict[str, Any]) -> Optional[Dict]:
+        """Update a line item. Convenience wrapper around update_object."""
+        return self.update_object("line_items", line_item_id, properties)
+
+    # ========================================================================
+    # Product Methods
+    # ========================================================================
+
+    def get_product_by_sku(self, sku: str) -> Optional[Dict]:
+        """
+        Find a product by SKU.
+
+        Args:
+            sku: Product SKU (hs_sku in HubSpot)
+
+        Returns:
+            Product object if found, None otherwise
+        """
+        results = self.search_objects(
+            "products",
+            [{"filters": [{"propertyName": "hs_sku", "operator": "EQ", "value": sku}]}]
+        )
+        return results[0] if results else None
+
+    def create_product(self, properties: Dict[str, Any]) -> Optional[Dict]:
+        """Create a product. Convenience wrapper around create_object."""
+        return self.create_object("products", properties)
+
     # ========================================================================
     # Connection Test
     # ========================================================================

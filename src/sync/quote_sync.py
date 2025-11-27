@@ -1,6 +1,11 @@
 """
 Quote synchronization module with approved pipeline strategy.
 Syncs Epicor Quotes to HubSpot Deals (Quotes Pipeline).
+
+When a quote is converted to an order (Closed Won):
+- Creates/updates the Order deal in the Orders pipeline
+- Associates Order deal with Company
+- Links Quote deal to Order deal
 """
 
 import logging
@@ -9,6 +14,8 @@ from typing import List, Dict, Any, Optional
 from src.clients.epicor_client import EpicorClient
 from src.clients.hubspot_client import HubSpotClient
 from src.transformers.quote_transformer import QuoteTransformer
+from src.transformers.order_transformer import OrderTransformer
+from src.sync.line_item_sync import LineItemSync
 from src.utils.error_handler import ErrorTracker
 
 
@@ -33,6 +40,8 @@ class QuoteSync:
         self.epicor = epicor_client
         self.hubspot = hubspot_client
         self.transformer = QuoteTransformer()
+        self.order_transformer = OrderTransformer()
+        self.line_item_sync = LineItemSync(hubspot_client)
         self.error_tracker = ErrorTracker()
 
     def sync_all_quotes(
@@ -190,4 +199,122 @@ class QuoteSync:
         except Exception as e:
             logger.warning(f"Failed to associate quote {quote_num} to company: {e}")
 
+        # Sync line items if present
+        line_items = quote_data.get('QuoteDtls', [])
+        if line_items:
+            try:
+                line_item_summary = self.line_item_sync.sync_quote_line_items(
+                    deal_id, line_items, quote_num
+                )
+                logger.info(
+                    f"Quote {quote_num} line items: {line_item_summary['created']} created, "
+                    f"{line_item_summary['updated']} updated"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to sync line items for quote {quote_num}: {e}")
+
+        # If quote is Closed Won (converted to order), create/link the order deal
+        if quote_data.get('Ordered'):
+            self._handle_converted_order(quote_num, deal_id, company_id)
+
         return action
+
+    def _handle_converted_order(
+        self,
+        quote_num: int,
+        quote_deal_id: str,
+        company_id: str
+    ) -> None:
+        """
+        Handle a quote that was converted to an order.
+
+        When a quote is Closed Won (Ordered=true):
+        1. Find the corresponding order in Epicor
+        2. Create/update the Order deal in the Orders pipeline
+        3. Associate Order deal with Company
+        4. Link Quote deal to Order deal
+
+        Args:
+            quote_num: Epicor quote number
+            quote_deal_id: HubSpot quote deal ID
+            company_id: HubSpot company ID
+        """
+        logger.info(f"Quote {quote_num} converted to order - processing linked order...")
+
+        # Find the order in Epicor that was created from this quote
+        try:
+            order_data = self.epicor.get_order_by_quote(quote_num)
+        except Exception as e:
+            logger.error(f"Failed to find order for quote {quote_num}: {e}")
+            self.error_tracker.add_error('quote', quote_num, f"Failed to find linked order: {e}")
+            return
+
+        if not order_data:
+            logger.warning(f"No order found in Epicor for quote {quote_num}")
+            return
+
+        order_num = order_data['OrderNum']
+        logger.info(f"Found order {order_num} linked to quote {quote_num}")
+
+        # Transform order data
+        try:
+            order_properties = self.order_transformer.transform(order_data)
+        except Exception as e:
+            logger.error(f"Failed to transform order {order_num}: {e}")
+            self.error_tracker.add_error('order', order_num, f"Transform error: {e}")
+            return
+
+        # Check if order deal exists in HubSpot
+        existing_order_deal = self.hubspot.get_deal_by_property(
+            'epicor_order_number',
+            order_num
+        )
+
+        if existing_order_deal:
+            # Update existing order deal
+            order_deal_id = existing_order_deal['id']
+            result = self.hubspot.update_deal(order_deal_id, order_properties)
+            if result:
+                logger.info(f"✅ Updated linked order {order_num}")
+            else:
+                logger.error(f"❌ Failed to update order {order_num}")
+                self.error_tracker.add_error('order', order_num, "HubSpot update failed")
+                return
+        else:
+            # Create new order deal
+            result = self.hubspot.create_deal(order_properties)
+            if result:
+                order_deal_id = result['id']
+                logger.info(f"✅ Created linked order {order_num}")
+            else:
+                logger.error(f"❌ Failed to create order {order_num}")
+                self.error_tracker.add_error('order', order_num, "HubSpot create failed")
+                return
+
+        # Associate order deal with company
+        try:
+            self.hubspot.associate_deal_to_company(order_deal_id, company_id)
+            logger.debug(f"Associated order {order_num} to company")
+        except Exception as e:
+            logger.warning(f"Failed to associate order {order_num} to company: {e}")
+
+        # Link quote deal to order deal
+        try:
+            self.hubspot.associate_deal_to_deal(quote_deal_id, order_deal_id)
+            logger.info(f"🔗 Linked quote {quote_num} to order {order_num}")
+        except Exception as e:
+            logger.warning(f"Failed to link quote {quote_num} to order {order_num}: {e}")
+
+        # Sync order line items if present
+        order_line_items = order_data.get('OrderDtls', [])
+        if order_line_items:
+            try:
+                line_item_summary = self.line_item_sync.sync_order_line_items(
+                    order_deal_id, order_line_items, order_num
+                )
+                logger.info(
+                    f"Order {order_num} line items: {line_item_summary['created']} created, "
+                    f"{line_item_summary['updated']} updated"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to sync line items for order {order_num}: {e}")

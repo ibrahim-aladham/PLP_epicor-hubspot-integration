@@ -307,6 +307,30 @@ class EpicorClient:
             filter_expr=filter_condition
         )
 
+    def get_order_by_quote(self, quote_num: int, expand_line_items: bool = True) -> Optional[Dict[str, Any]]:
+        """
+        Find a sales order that was created from a specific quote.
+
+        In Epicor, when a quote is converted to an order, the order's
+        QuoteNum field references the original quote.
+
+        Args:
+            quote_num: The quote number to search for
+            expand_line_items: Whether to include order line items (default: True)
+
+        Returns:
+            Order record if found, None otherwise
+        """
+        expand = "OrderDtls" if expand_line_items else None
+        orders = self.get_entity(
+            service="Erp.BO.SalesOrderSvc",
+            entity_set="SalesOrders",
+            filter_expr=f"QuoteNum eq {quote_num}",
+            expand=expand,
+            limit=1
+        )
+        return orders[0] if orders else None
+
     # ========================================================================
     # Connection Test
     # ========================================================================

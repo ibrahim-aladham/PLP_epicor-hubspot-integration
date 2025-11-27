@@ -42,14 +42,16 @@ class LineItemSync:
     def sync_quote_line_items(
         self,
         deal_id: str,
-        line_items: List[Dict[str, Any]]
+        line_items: List[Dict[str, Any]],
+        quote_num: int = None
     ) -> Dict[str, Any]:
         """
-        Sync quote line items to a deal.
+        Sync quote line items to a deal (upsert logic).
 
         Args:
             deal_id: HubSpot deal ID
             line_items: List of QuoteDtl records from Epicor
+            quote_num: Quote number (for building epicor_line_item_id)
 
         Returns:
             Sync summary
@@ -57,13 +59,15 @@ class LineItemSync:
         logger.info(f"Syncing {len(line_items)} quote line items for deal {deal_id}")
 
         created_count = 0
+        updated_count = 0
         product_created_count = 0
 
         for line_item in line_items:
             try:
-                # Transform line item
-                properties = self.transformer.transform_quote_line(line_item)
+                # Transform line item (pass quote_num for unique ID)
+                properties = self.transformer.transform_quote_line(line_item, quote_num)
                 sku = properties.get('sku')
+                epicor_id = properties.get('epicor_line_item_id')
 
                 if not sku:
                     logger.warning("Line item missing SKU, skipping")
@@ -77,36 +81,43 @@ class LineItemSync:
                 if product_created:
                     product_created_count += 1
 
-                # Create line item
-                result = self.hubspot.create_line_item(properties)
-                if result:
-                    line_item_id = result['id']
+                # Check if line item already exists (by epicor_line_item_id)
+                existing_line_item = None
+                if epicor_id:
+                    existing_line_item = self.hubspot.get_line_item_by_epicor_id(epicor_id)
 
-                    # Associate to deal
-                    assoc_result = self.hubspot.associate_line_item_to_deal(
-                        line_item_id,
-                        deal_id
-                    )
+                if existing_line_item:
+                    # Update existing line item
+                    line_item_id = existing_line_item['id']
+                    result = self.hubspot.update_line_item(line_item_id, properties)
+                    if result:
+                        updated_count += 1
+                        logger.debug(f"Updated line item {epicor_id}")
+                else:
+                    # Create new line item
+                    result = self.hubspot.create_line_item(properties)
+                    if result:
+                        line_item_id = result['id']
 
-                    if assoc_result:
+                        # Associate to deal
+                        self.hubspot.associate_line_item_to_deal(line_item_id, deal_id)
                         created_count += 1
-                        logger.debug(f"Created line item for SKU {sku}")
-                    else:
-                        logger.warning(f"Failed to associate line item {sku} to deal")
+                        logger.debug(f"Created line item {epicor_id}")
 
             except Exception as e:
-                logger.error(f"Error creating line item: {e}")
+                logger.error(f"Error syncing line item: {e}")
                 self.error_tracker.add_error('line_item', str(line_item), str(e))
 
         summary = {
             'total': len(line_items),
             'created': created_count,
+            'updated': updated_count,
             'products_created': product_created_count,
             'errors': len(self.error_tracker.errors)
         }
 
         logger.info(
-            f"Line items: {created_count}/{len(line_items)} created, "
+            f"Line items: {created_count} created, {updated_count} updated, "
             f"{product_created_count} products auto-created"
         )
 
@@ -115,14 +126,16 @@ class LineItemSync:
     def sync_order_line_items(
         self,
         deal_id: str,
-        line_items: List[Dict[str, Any]]
+        line_items: List[Dict[str, Any]],
+        order_num: int = None
     ) -> Dict[str, Any]:
         """
-        Sync order line items to a deal.
+        Sync order line items to a deal (upsert logic).
 
         Args:
             deal_id: HubSpot deal ID
             line_items: List of OrderDtl records from Epicor
+            order_num: Order number (for building epicor_line_item_id)
 
         Returns:
             Sync summary
@@ -130,13 +143,15 @@ class LineItemSync:
         logger.info(f"Syncing {len(line_items)} order line items for deal {deal_id}")
 
         created_count = 0
+        updated_count = 0
         product_created_count = 0
 
         for line_item in line_items:
             try:
-                # Transform line item
-                properties = self.transformer.transform_order_line(line_item)
+                # Transform line item (pass order_num for unique ID)
+                properties = self.transformer.transform_order_line(line_item, order_num)
                 sku = properties.get('sku')
+                epicor_id = properties.get('epicor_line_item_id')
 
                 if not sku:
                     logger.warning("Line item missing SKU, skipping")
@@ -150,36 +165,43 @@ class LineItemSync:
                 if product_created:
                     product_created_count += 1
 
-                # Create line item
-                result = self.hubspot.create_line_item(properties)
-                if result:
-                    line_item_id = result['id']
+                # Check if line item already exists (by epicor_line_item_id)
+                existing_line_item = None
+                if epicor_id:
+                    existing_line_item = self.hubspot.get_line_item_by_epicor_id(epicor_id)
 
-                    # Associate to deal
-                    assoc_result = self.hubspot.associate_line_item_to_deal(
-                        line_item_id,
-                        deal_id
-                    )
+                if existing_line_item:
+                    # Update existing line item
+                    line_item_id = existing_line_item['id']
+                    result = self.hubspot.update_line_item(line_item_id, properties)
+                    if result:
+                        updated_count += 1
+                        logger.debug(f"Updated line item {epicor_id}")
+                else:
+                    # Create new line item
+                    result = self.hubspot.create_line_item(properties)
+                    if result:
+                        line_item_id = result['id']
 
-                    if assoc_result:
+                        # Associate to deal
+                        self.hubspot.associate_line_item_to_deal(line_item_id, deal_id)
                         created_count += 1
-                        logger.debug(f"Created line item for SKU {sku}")
-                    else:
-                        logger.warning(f"Failed to associate line item {sku} to deal")
+                        logger.debug(f"Created line item {epicor_id}")
 
             except Exception as e:
-                logger.error(f"Error creating line item: {e}")
+                logger.error(f"Error syncing line item: {e}")
                 self.error_tracker.add_error('line_item', str(line_item), str(e))
 
         summary = {
             'total': len(line_items),
             'created': created_count,
+            'updated': updated_count,
             'products_created': product_created_count,
             'errors': len(self.error_tracker.errors)
         }
 
         logger.info(
-            f"Line items: {created_count}/{len(line_items)} created, "
+            f"Line items: {created_count} created, {updated_count} updated, "
             f"{product_created_count} products auto-created"
         )
 

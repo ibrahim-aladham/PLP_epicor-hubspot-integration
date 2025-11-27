@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional
 from src.clients.epicor_client import EpicorClient
 from src.clients.hubspot_client import HubSpotClient
 from src.transformers.order_transformer import OrderTransformer
+from src.sync.line_item_sync import LineItemSync
 from src.utils.error_handler import ErrorTracker
 
 
@@ -33,6 +34,7 @@ class OrderSync:
         self.epicor = epicor_client
         self.hubspot = hubspot_client
         self.transformer = OrderTransformer()
+        self.line_item_sync = LineItemSync(hubspot_client)
         self.error_tracker = ErrorTracker()
 
     def sync_all_orders(
@@ -184,5 +186,19 @@ class OrderSync:
             logger.debug(f"Associated order {order_num} to company {customer_num}")
         except Exception as e:
             logger.warning(f"Failed to associate order {order_num} to company: {e}")
+
+        # Sync line items if present
+        line_items = order_data.get('OrderDtls', [])
+        if line_items:
+            try:
+                line_item_summary = self.line_item_sync.sync_order_line_items(
+                    deal_id, line_items, order_num
+                )
+                logger.info(
+                    f"Order {order_num} line items: {line_item_summary['created']} created, "
+                    f"{line_item_summary['updated']} updated"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to sync line items for order {order_num}: {e}")
 
         return action
