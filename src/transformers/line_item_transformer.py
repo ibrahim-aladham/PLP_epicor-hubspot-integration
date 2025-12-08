@@ -48,12 +48,20 @@ class LineItemTransformer(BaseTransformer):
         q_num = quote_num or self.safe_get(line_data, 'QuoteNum')
         q_line = self.safe_get(line_data, 'QuoteLine')
 
+        # Get part number and description
+        part_num = self.safe_get(line_data, 'PartNum') or ''
+        description = self.safe_get(line_data, 'LineDesc') or ''
+
+        # Build name as: part_number + ' ' + description
+        name = f"{part_num} {description}".strip() or f"Part {part_num}"
+
         properties = {
-            'sku': self.safe_get(line_data, 'PartNum'),
-            'name': self.safe_get(line_data, 'LineDesc') or f"Part {line_data.get('PartNum', '')}",
+            'sku': part_num,
+            'name': name,
+            'description': description,
             'quantity': self.safe_get(line_data, 'OrderQty', 1),
-            'price': self.safe_get(line_data, 'DocUnitPrice', 0),
-            'amount': self.safe_get(line_data, 'DocExtPriceDtl', 0)
+            'price': self.safe_get(line_data, 'ExpUnitPrice', 0),
+            'amount': self.safe_get(line_data, 'ExtPriceDtl', 0)
         }
 
         # Add unique identifier for upsert logic
@@ -86,12 +94,20 @@ class LineItemTransformer(BaseTransformer):
         o_num = order_num or self.safe_get(line_data, 'OrderNum')
         o_line = self.safe_get(line_data, 'OrderLine')
 
+        # Get part number and description
+        part_num = self.safe_get(line_data, 'PartNum') or ''
+        description = self.safe_get(line_data, 'LineDesc') or ''
+
+        # Build name as: part_number + ' ' + description
+        name = f"{part_num} {description}".strip() or f"Part {part_num}"
+
         properties = {
-            'sku': self.safe_get(line_data, 'PartNum'),
-            'name': self.safe_get(line_data, 'LineDesc') or f"Part {line_data.get('PartNum', '')}",
+            'sku': part_num,
+            'name': name,
+            'description': description,
             'quantity': self.safe_get(line_data, 'OrderQty', 1),
-            'price': self.safe_get(line_data, 'DocUnitPrice', 0),
-            'amount': self.safe_get(line_data, 'DocExtPriceDtl', 0)
+            'price': self.safe_get(line_data, 'UnitPrice', 0),
+            'amount': self.safe_get(line_data, 'ExtPriceDtl', 0)
         }
 
         # Add unique identifier for upsert logic
@@ -108,7 +124,8 @@ class LineItemTransformer(BaseTransformer):
     def get_minimal_product_properties(
         self,
         part_num: str,
-        line_desc: Optional[str] = None
+        line_desc: Optional[str] = None,
+        price: float = None
     ) -> Dict[str, Any]:
         """
         Create minimal product properties for auto-creation.
@@ -117,16 +134,28 @@ class LineItemTransformer(BaseTransformer):
         - hs_sku (required)
         - name (required)
         - description
+        - price (optional)
 
         Args:
             part_num: Part number (SKU)
-            line_desc: Line description (used as name if available)
+            line_desc: Line description
+            price: Unit price (optional)
 
         Returns:
             Minimal product properties
         """
-        return {
+        description = line_desc or ''
+        # Build name as: part_number + ' ' + description
+        name = f"{part_num} {description}".strip() or f"Part {part_num}"
+
+        properties = {
             'hs_sku': part_num,
-            'name': line_desc or f"Part {part_num}",
-            'description': f"Auto-created from Epicor sync on first use"
+            'name': name,
+            'description': description
         }
+
+        # Add price if provided
+        if price is not None:
+            properties['price'] = price
+
+        return properties

@@ -76,10 +76,16 @@ class LineItemSync:
                 # Ensure product exists (create if needed)
                 product_created = self.ensure_product_exists(
                     sku,
-                    properties.get('name')
+                    properties.get('description'),
+                    properties.get('price')
                 )
                 if product_created:
                     product_created_count += 1
+
+                # Link line item to product via hs_product_id
+                product_id = self.product_cache.get(sku)
+                if product_id:
+                    properties['hs_product_id'] = product_id
 
                 # Check if line item already exists (by epicor_line_item_id)
                 existing_line_item = None
@@ -160,10 +166,16 @@ class LineItemSync:
                 # Ensure product exists (create if needed)
                 product_created = self.ensure_product_exists(
                     sku,
-                    properties.get('name')
+                    properties.get('description'),
+                    properties.get('price')
                 )
                 if product_created:
                     product_created_count += 1
+
+                # Link line item to product via hs_product_id
+                product_id = self.product_cache.get(sku)
+                if product_id:
+                    properties['hs_product_id'] = product_id
 
                 # Check if line item already exists (by epicor_line_item_id)
                 existing_line_item = None
@@ -210,7 +222,8 @@ class LineItemSync:
     def ensure_product_exists(
         self,
         sku: str,
-        name: str = None
+        description: str = None,
+        price: float = None
     ) -> bool:
         """
         Ensure product exists in HubSpot, create if not.
@@ -222,7 +235,8 @@ class LineItemSync:
 
         Args:
             sku: Product SKU
-            name: Product name (optional)
+            description: Product description (optional)
+            price: Unit price (optional)
 
         Returns:
             True if product was created, False if already existed
@@ -234,17 +248,24 @@ class LineItemSync:
         # Search HubSpot
         product = self.hubspot.get_product_by_sku(sku)
 
+        # Get product properties
+        properties = self.transformer.get_minimal_product_properties(sku, description, price)
+
         if product:
-            # Product exists, cache it
-            self.product_cache[sku] = product['id']
-            logger.debug(f"Product {sku} already exists")
-            return False
+            # Product exists, update it
+            product_id = product['id']
+            self.product_cache[sku] = product_id
+
+            result = self.hubspot.update_product(product_id, properties)
+            if result:
+                logger.debug(f"Updated product {sku}")
+                return False  # Not created, updated
+            else:
+                logger.warning(f"Failed to update product {sku}")
+                return False
         else:
             # Product doesn't exist, create it
             logger.info(f"Product {sku} not found, auto-creating...")
-
-            # Get minimal product properties
-            properties = self.transformer.get_minimal_product_properties(sku, name)
 
             # Create product
             result = self.hubspot.create_product(properties)

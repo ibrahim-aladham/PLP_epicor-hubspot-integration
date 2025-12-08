@@ -466,6 +466,10 @@ class HubSpotClient:
         """Create a product. Convenience wrapper around create_object."""
         return self.create_object("products", properties)
 
+    def update_product(self, product_id: str, properties: Dict[str, Any]) -> Optional[Dict]:
+        """Update a product. Convenience wrapper around update_object."""
+        return self.update_object("products", product_id, properties)
+
     # ========================================================================
     # Connection Test
     # ========================================================================
