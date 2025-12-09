@@ -41,6 +41,7 @@ class HubSpotClient:
         self.rate_limit_delay = rate_limit_delay
         self.last_request_time = 0
         self.logger = logging.getLogger(__name__)
+        self._association_type_cache = {}  # Cache for association type IDs
 
         # Create session with retry logic
         self.session = requests.Session()
@@ -110,8 +111,10 @@ class HubSpotClient:
                 except:
                     error_detail = response.text
 
+                self.logger.error(f"HubSpot API Error: {response.status_code} - {error_detail}")
+
                 raise HubSpotAPIError(
-                    f"{method} {url} failed",
+                    f"{method} {url} failed (Status: {response.status_code}, Response: {error_detail})",
                     status_code=response.status_code,
                     response=str(error_detail)
                 )
@@ -247,6 +250,55 @@ class HubSpotClient:
     # Associations
     # ========================================================================
 
+    def get_association_type_id(
+        self,
+        from_object: str,
+        to_object: str,
+        label: str = None
+    ) -> int:
+        """
+        Get the association type ID for a given object pair (with caching).
+
+        Args:
+            from_object: Source object type (e.g., "deals")
+            to_object: Target object type (e.g., "companies")
+            label: Optional association label (None for unlabeled/default)
+
+        Returns:
+            Association type ID
+        """
+        cache_key = f"{from_object}:{to_object}:{label or 'default'}"
+        if cache_key in self._association_type_cache:
+            return self._association_type_cache[cache_key]
+
+        url = f"{self.base_url}/crm/v4/associations/{from_object}/{to_object}/labels"
+        response = self._make_request("GET", url)
+        labels = response.json().get('results', [])
+
+        self.logger.debug(f"Association labels for {from_object} -> {to_object}: {labels}")
+
+        type_id = None
+        for assoc in labels:
+            if label is None:
+                # Return the first unlabeled association (category: HUBSPOT_DEFINED)
+                if assoc.get('category') == 'HUBSPOT_DEFINED' and not assoc.get('label'):
+                    type_id = assoc.get('typeId')
+                    break
+            elif assoc.get('label') == label:
+                type_id = assoc.get('typeId')
+                break
+
+        # Fallback: return the first available type ID
+        if type_id is None and labels:
+            type_id = labels[0].get('typeId')
+
+        if type_id is None:
+            raise HubSpotAPIError(f"No association type found for {from_object} -> {to_object}")
+
+        self._association_type_cache[cache_key] = type_id
+        self.logger.info(f"Association type ID for {from_object} -> {to_object}: {type_id}")
+        return type_id
+
     def create_association(
         self,
         from_object: str,
@@ -268,11 +320,11 @@ class HubSpotClient:
         Returns:
             True if successful
 
-        Common association type IDs:
-            - contact_to_company: 1
-            - deal_to_company: 5
+        Common association type IDs (V4 API):
+            - contact_to_company: 279
+            - deal_to_company: 341
             - deal_to_contact: 3
-            - line_item_to_deal: 20
+            - line_item_to_deal: 19
 
         Example:
             >>> client.create_association("contacts", "123", "companies", "456", 1)
@@ -367,12 +419,14 @@ class HubSpotClient:
         Returns:
             True if successful
         """
+        # Dynamically get the correct association type ID for this HubSpot account
+        type_id = self.get_association_type_id("deals", "companies")
         return self.create_association(
             from_object="deals",
             from_id=deal_id,
             to_object="companies",
             to_id=company_id,
-            association_type_id=5  # deal_to_company
+            association_type_id=type_id
         )
 
     def associate_deal_to_deal(self, from_deal_id: str, to_deal_id: str) -> bool:
@@ -386,12 +440,13 @@ class HubSpotClient:
         Returns:
             True if successful
         """
+        type_id = self.get_association_type_id("deals", "deals")
         return self.create_association(
             from_object="deals",
             from_id=from_deal_id,
             to_object="deals",
             to_id=to_deal_id,
-            association_type_id=6  # deal_to_deal
+            association_type_id=type_id
         )
 
     # ========================================================================
@@ -413,12 +468,13 @@ class HubSpotClient:
         Returns:
             True if successful
         """
+        type_id = self.get_association_type_id("line_items", "deals")
         return self.create_association(
             from_object="line_items",
             from_id=line_item_id,
             to_object="deals",
             to_id=deal_id,
-            association_type_id=20  # line_item_to_deal
+            association_type_id=type_id
         )
 
     def get_line_item_by_epicor_id(self, epicor_line_item_id: str) -> Optional[Dict]:

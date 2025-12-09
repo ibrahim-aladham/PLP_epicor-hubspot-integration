@@ -31,28 +31,28 @@ from src.transformers.order_transformer import OrderTransformer
 from src.sync.line_item_sync import LineItemSync
 from src.utils.logger import setup_logging
 
-# Customer mapping: CustNum -> HubSpot Company ID
+# Customer mapping: CustNum -> HubSpot Company ID (verified 2025-12-09)
 CUSTOMER_HUBSPOT_MAP = {
-    7: "128438254552",   # Westower Communications - Anjo
-    8: "127813962684",   # Bell Canada - Pembroke
-    9: "127806761926",   # Apt Prophet Technologies
-    10: "127830066129",  # TVC Communications Canada
-    11: "127804962762",  # Advanced Tower Services (2007)
-    12: "128387920862",  # Amtelecom Inc.
-    13: "127835488188",  # Andec Agencies Ltd.
-    14: "128340951997",  # Preformed Line Products (Spain)
-    15: "128387920863",  # MTS Allstream Inc.
-    16: "127833670605",  # Bell Canada
-    17: "128387920864",  # Anixter Power Solutions Canada
-    18: "127830066133",  # Burlington H.E.C.
-    19: "127837257708",  # GrandBridge Energy
-    20: "127806761929",  # Canadian Niagara Power Co.
-    21: "127812189170",  # CapTel Inc.
-    22: "127835488191",  # City of Thunder Bay
-    23: "127828253678",  # Communications & Cabling Contr
-    29: "127828253679",  # Bell - London
-    30: "127828253680",  # Expertech - Newmarket
-    31: "127835488193",  # Expertech - Purchasing
+    7: "131734023160",    # Westower Communications - Anjou
+    8: "131717829577",    # Bell Canada - Pembroke
+    9: "131753802711",    # Apt Prophet Technologies
+    10: "131753802712",   # TVC Communications Canada
+    11: "131689364416",   # Advanced Tower Services (2007) Ltd.
+    12: "131728620508",   # Amtelecom Inc.
+    13: "131723226055",   # Andec Agencies Ltd.
+    14: "131717829579",   # Preformed Line Products (Spain S.A.) Apresa
+    15: "131741214656",   # MTS Allstream Inc.
+    16: "131691154399",   # Bell Canada
+    17: "131793169369",   # Anixter Power Solutions Canada
+    18: "131717829580",   # Burlington H.E.C.
+    19: "131703730117",   # GrandBridge Energy
+    20: "131726817254",   # Canadian Niagara Power Co.
+    21: "131897489392",   # CapTel Inc.
+    22: "131703730118",   # City of Thunder Bay
+    23: "131902931898",   # Communications & Cabling Contractors Inc.
+    29: "131793169370",   # Bell - London
+    30: "131789572085",   # Expertech - Newmarket
+    31: "131726817255",   # Expertech - Purchasing
 }
 
 CUSTOMER_NUMS = list(CUSTOMER_HUBSPOT_MAP.keys())
@@ -161,13 +161,7 @@ def sync_quotes(epicor_client, hubspot_client, line_item_sync, settings):
 
             # Associate deal with company (always ensure association exists)
             try:
-                hubspot_client.create_association(
-                    from_object="deals",
-                    from_id=deal_id,
-                    to_object="companies",
-                    to_id=company_id,
-                    association_type_id=5  # deal_to_company
-                )
+                hubspot_client.associate_deal_to_company(deal_id, company_id)
                 print(f"           -> Associated with Company {company_id}")
             except Exception as e:
                 print(f"           -> Association failed: {e}")
@@ -281,13 +275,7 @@ def sync_orders(epicor_client, hubspot_client, line_item_sync, settings):
 
             # Associate deal with company (always ensure association exists)
             try:
-                hubspot_client.create_association(
-                    from_object="deals",
-                    from_id=deal_id,
-                    to_object="companies",
-                    to_id=company_id,
-                    association_type_id=5  # deal_to_company
-                )
+                hubspot_client.associate_deal_to_company(deal_id, company_id)
                 print(f"           -> Associated with Company {company_id}")
             except Exception as e:
                 print(f"           -> Association failed: {e}")
