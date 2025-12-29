@@ -12,6 +12,7 @@ import logging
 from typing import Dict, Any, Optional
 
 from src.transformers.base_transformer import BaseTransformer
+from src.utils.date_utils import epicor_to_unix_ms
 
 
 logger = logging.getLogger(__name__)
@@ -55,13 +56,26 @@ class LineItemTransformer(BaseTransformer):
         # Build name as: part_number + ' ' + description
         name = f"{part_num} {description}".strip() or f"Part {part_num}"
 
+        # Get cost and comment fields
+        current_cost = self.safe_get(line_data, 'Number02')
+        cost_source = self.safe_get(line_data, 'Character06')
+        backup_note = self.safe_get(line_data, 'Character01')
+        line_comment = self.safe_get(line_data, 'QuoteComment')
+
         properties = {
             'sku': part_num,
             'name': name,
             'description': description,
             'quantity': self.safe_get(line_data, 'OrderQty', 1),
             'price': self.safe_get(line_data, 'ExpUnitPrice', 0),
-            'amount': self.safe_get(line_data, 'ExtPriceDtl', 0)
+            'amount': self.safe_get(line_data, 'ExtPriceDtl', 0),
+            # Cost fields
+            'epicor_line_current_cost': current_cost,
+            'hs_cost_of_goods_sold': current_cost,
+            'epicor_cost_source': cost_source,
+            # Comment/note fields
+            'epicor_quote_backup_note': backup_note,
+            'epicor_line_comment': line_comment
         }
 
         # Add unique identifier for upsert logic
@@ -101,13 +115,29 @@ class LineItemTransformer(BaseTransformer):
         # Build name as: part_number + ' ' + description
         name = f"{part_num} {description}".strip() or f"Part {part_num}"
 
+        # Get date fields and convert to Unix ms for HubSpot date/time picker
+        need_by_date = epicor_to_unix_ms(self.safe_get(line_data, 'NeedByDate'))
+        request_date = epicor_to_unix_ms(self.safe_get(line_data, 'RequestDate'))
+
+        # Get custom fields
+        c1_manager = self.safe_get(line_data, 'Character01')
+
+        # Build computed field: OrderNum~OrderLine~PartNum
+        c1_job_manager = f"{o_num}~{o_line}~{part_num}" if o_num and o_line else None
+
         properties = {
             'sku': part_num,
             'name': name,
             'description': description,
             'quantity': self.safe_get(line_data, 'OrderQty', 1),
             'price': self.safe_get(line_data, 'UnitPrice', 0),
-            'amount': self.safe_get(line_data, 'ExtPriceDtl', 0)
+            'amount': self.safe_get(line_data, 'ExtPriceDtl', 0),
+            # Date fields (Unix ms for HubSpot date/time picker)
+            'epicor_promise_ship_date': need_by_date,
+            'epicor_revised_ship_date': request_date,
+            # Custom fields
+            'epicor_c1_manager': c1_manager,
+            'epicor_c1_job_manager': c1_job_manager
         }
 
         # Add unique identifier for upsert logic
