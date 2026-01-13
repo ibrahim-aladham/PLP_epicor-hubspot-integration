@@ -16,7 +16,7 @@ from src.clients.hubspot_client import HubSpotClient
 from src.transformers.quote_transformer import QuoteTransformer
 from src.transformers.order_transformer import OrderTransformer
 from src.sync.line_item_sync import LineItemSync
-from src.utils.error_handler import ErrorTracker
+from src.utils.error_handler import ErrorTracker, FailedRecordTracker
 
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,8 @@ class QuoteSync:
     def __init__(
         self,
         epicor_client: EpicorClient,
-        hubspot_client: HubSpotClient
+        hubspot_client: HubSpotClient,
+        failed_record_tracker: FailedRecordTracker = None
     ):
         """
         Initialize quote sync.
@@ -36,6 +37,7 @@ class QuoteSync:
         Args:
             epicor_client: Epicor API client
             hubspot_client: HubSpot API client
+            failed_record_tracker: Optional tracker for failed records (CSV output)
         """
         self.epicor = epicor_client
         self.hubspot = hubspot_client
@@ -43,6 +45,7 @@ class QuoteSync:
         self.order_transformer = OrderTransformer()
         self.line_item_sync = LineItemSync(hubspot_client)
         self.error_tracker = ErrorTracker()
+        self.failed_tracker = failed_record_tracker
 
     def sync_all_quotes(
         self,
@@ -94,6 +97,16 @@ class QuoteSync:
                 quote_num = quote.get('QuoteNum', 'unknown')
                 logger.error(f"Error syncing quote {quote_num}: {e}")
                 self.error_tracker.add_error('quote', quote_num, str(e))
+                # Track failed record for CSV output
+                if self.failed_tracker:
+                    self.failed_tracker.add_failed_record(
+                        entity_type='quote',
+                        entity_id=quote_num,
+                        operation='sync',
+                        error_message=str(e),
+                        error_type=type(e).__name__,
+                        source_data=quote
+                    )
 
         # Summary
         summary = {
@@ -144,6 +157,11 @@ class QuoteSync:
         except Exception as e:
             logger.error(f"Transformation error for quote {quote_num}: {e}")
             self.error_tracker.add_error('quote', quote_num, f"Transform error: {e}")
+            if self.failed_tracker:
+                self.failed_tracker.add_failed_record(
+                    entity_type='quote', entity_id=quote_num, operation='transform',
+                    error_message=str(e), error_type=type(e).__name__, source_data=quote_data
+                )
             return 'error'
 
         # Get customer number for association
@@ -165,6 +183,12 @@ class QuoteSync:
                 quote_num,
                 f"Company {customer_num} not found"
             )
+            if self.failed_tracker:
+                self.failed_tracker.add_failed_record(
+                    entity_type='quote', entity_id=quote_num, operation='associate',
+                    error_message=f"Company {customer_num} not found in HubSpot",
+                    error_type='MissingCompany', source_data=quote_data
+                )
             return 'error'
 
         company_id = company['id']
@@ -174,22 +198,34 @@ class QuoteSync:
             deal_id = existing_deal['id']
             result = self.hubspot.update_deal(deal_id, properties)
             if result:
-                logger.info(f"✅ Updated quote {quote_num}")
+                logger.info(f"Updated quote {quote_num}")
                 action = 'updated'
             else:
-                logger.error(f"❌ Failed to update quote {quote_num}")
+                logger.error(f"Failed to update quote {quote_num}")
                 self.error_tracker.add_error('quote', quote_num, "HubSpot update failed")
+                if self.failed_tracker:
+                    self.failed_tracker.add_failed_record(
+                        entity_type='quote', entity_id=quote_num, operation='update',
+                        error_message='HubSpot update failed', error_type='HubSpotAPIError',
+                        source_data=quote_data
+                    )
                 return 'error'
         else:
             # Create new deal
             result = self.hubspot.create_deal(properties)
             if result:
                 deal_id = result['id']
-                logger.info(f"✅ Created quote {quote_num}")
+                logger.info(f"Created quote {quote_num}")
                 action = 'created'
             else:
-                logger.error(f"❌ Failed to create quote {quote_num}")
+                logger.error(f"Failed to create quote {quote_num}")
                 self.error_tracker.add_error('quote', quote_num, "HubSpot create failed")
+                if self.failed_tracker:
+                    self.failed_tracker.add_failed_record(
+                        entity_type='quote', entity_id=quote_num, operation='create',
+                        error_message='HubSpot create failed', error_type='HubSpotAPIError',
+                        source_data=quote_data
+                    )
                 return 'error'
 
         # Always ensure association exists (for both create and update)

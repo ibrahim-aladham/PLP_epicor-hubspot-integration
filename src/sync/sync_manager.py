@@ -4,7 +4,7 @@ Coordinates all sync operations in the correct order.
 """
 
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from datetime import datetime
 
 from src.clients.epicor_client import EpicorClient
@@ -13,6 +13,7 @@ from src.sync.customer_sync import CustomerSync
 from src.sync.quote_sync import QuoteSync
 from src.sync.order_sync import OrderSync
 from src.sync.line_item_sync import LineItemSync
+from src.utils.error_handler import FailedRecordTracker
 from src.config import settings
 
 
@@ -33,7 +34,8 @@ class SyncManager:
     def __init__(
         self,
         epicor_client: EpicorClient,
-        hubspot_client: HubSpotClient
+        hubspot_client: HubSpotClient,
+        failed_records_file: Optional[str] = None
     ):
         """
         Initialize sync manager.
@@ -41,14 +43,18 @@ class SyncManager:
         Args:
             epicor_client: Epicor API client
             hubspot_client: HubSpot API client
+            failed_records_file: Optional path for failed records CSV
         """
         self.epicor = epicor_client
         self.hubspot = hubspot_client
 
-        # Initialize sync modules
-        self.customer_sync = CustomerSync(epicor_client, hubspot_client)
-        self.quote_sync = QuoteSync(epicor_client, hubspot_client)
-        self.order_sync = OrderSync(epicor_client, hubspot_client)
+        # Initialize failed record tracker
+        self.failed_tracker = FailedRecordTracker(failed_records_file)
+
+        # Initialize sync modules with shared failed tracker
+        self.customer_sync = CustomerSync(epicor_client, hubspot_client, self.failed_tracker)
+        self.quote_sync = QuoteSync(epicor_client, hubspot_client, self.failed_tracker)
+        self.order_sync = OrderSync(epicor_client, hubspot_client, self.failed_tracker)
         self.line_item_sync = LineItemSync(hubspot_client)
 
     def run_full_sync(self) -> Dict[str, Any]:
@@ -117,10 +123,21 @@ class SyncManager:
         summary['end_time'] = end_time.isoformat()
         summary['duration_seconds'] = duration
 
+        # Get failed records summary
+        if self.failed_tracker.has_failures():
+            failed_summary = self.failed_tracker.get_summary()
+            summary['failed_records'] = failed_summary
+            summary['failed_records_file'] = self.failed_tracker.output_file
+
+        # Close the failed tracker
+        self.failed_tracker.close()
+
         logger.info("\n" + "=" * 80)
         logger.info("FULL SYNC COMPLETE")
         logger.info(f"Duration: {duration:.2f} seconds")
         logger.info(f"Success: {summary['success']}")
+        if self.failed_tracker.has_failures():
+            logger.warning(f"Failed records logged to: {self.failed_tracker.output_file}")
         logger.info("=" * 80)
 
         return summary

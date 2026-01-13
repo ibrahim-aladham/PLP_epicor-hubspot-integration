@@ -2,13 +2,16 @@
 Error handling utilities for Epicor-HubSpot integration.
 
 This module provides custom exception classes, error logging wrappers,
-and retry decorators for robust error handling throughout the application.
+retry decorators, and failed record tracking for robust error handling.
 """
 
 import logging
 import time
 import functools
-from typing import Callable, Any, Type, Tuple, Optional
+import csv
+import os
+from datetime import datetime
+from typing import Callable, Any, Type, Tuple, Optional, List, Dict
 
 
 logger = logging.getLogger(__name__)
@@ -339,3 +342,179 @@ class ErrorTracker:
         """Clear all errors and warnings."""
         self.errors = []
         self.warnings = []
+
+
+# ============================================================================
+# Failed Record Tracker (CSV-based)
+# ============================================================================
+
+class FailedRecordTracker:
+    """
+    Tracks failed sync records and writes them to a CSV file for retry.
+
+    This tracker logs failed records with full context for debugging and
+    enables easy retry of failed records.
+
+    Example:
+        >>> tracker = FailedRecordTracker("logs/failed_records.csv")
+        >>> tracker.add_failed_record(
+        ...     entity_type='quote',
+        ...     entity_id=12345,
+        ...     operation='create',
+        ...     error_message='HubSpot API timeout',
+        ...     source_data={'QuoteNum': 12345, 'CustNum': 100}
+        ... )
+        >>> tracker.close()
+    """
+
+    CSV_HEADERS = [
+        'timestamp',
+        'entity_type',
+        'entity_id',
+        'operation',
+        'error_message',
+        'error_type',
+        'source_data',
+        'retry_count'
+    ]
+
+    def __init__(self, output_file: str = None):
+        """
+        Initialize failed record tracker.
+
+        Args:
+            output_file: Path to CSV file. Defaults to logs/failed_records_<timestamp>.csv
+        """
+        if output_file is None:
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            output_file = f"logs/failed_records_{timestamp}.csv"
+
+        self.output_file = output_file
+        self.failed_records: List[Dict] = []
+        self._file_handle = None
+        self._writer = None
+        self._initialized = False
+
+    def _ensure_initialized(self) -> None:
+        """Initialize CSV file and writer on first use."""
+        if self._initialized:
+            return
+
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(self.output_file) if os.path.dirname(self.output_file) else 'logs', exist_ok=True)
+
+        # Check if file exists (for header writing)
+        file_exists = os.path.exists(self.output_file)
+
+        # Open file in append mode
+        self._file_handle = open(self.output_file, 'a', newline='', encoding='utf-8')
+        self._writer = csv.DictWriter(self._file_handle, fieldnames=self.CSV_HEADERS)
+
+        # Write header only if new file
+        if not file_exists:
+            self._writer.writeheader()
+
+        self._initialized = True
+        logger.info(f"Failed record tracker initialized: {self.output_file}")
+
+    def add_failed_record(
+        self,
+        entity_type: str,
+        entity_id: Any,
+        operation: str,
+        error_message: str,
+        error_type: str = None,
+        source_data: Dict = None,
+        retry_count: int = 0
+    ) -> None:
+        """
+        Add a failed record to the tracker.
+
+        Args:
+            entity_type: Type of entity (customer, quote, order, line_item, product)
+            entity_id: Identifier of the entity (e.g., QuoteNum, OrderNum)
+            operation: Operation that failed (create, update, delete, associate)
+            error_message: Human-readable error description
+            error_type: Exception class name (optional)
+            source_data: Original data that failed to sync (optional)
+            retry_count: Number of times this record has been retried
+        """
+        self._ensure_initialized()
+
+        record = {
+            'timestamp': datetime.now().isoformat(),
+            'entity_type': entity_type,
+            'entity_id': str(entity_id),
+            'operation': operation,
+            'error_message': str(error_message)[:500],  # Truncate long messages
+            'error_type': error_type or 'Unknown',
+            'source_data': str(source_data)[:1000] if source_data else '',
+            'retry_count': retry_count
+        }
+
+        # Write to CSV immediately
+        self._writer.writerow(record)
+        self._file_handle.flush()  # Ensure written to disk
+
+        # Keep in memory for summary
+        self.failed_records.append(record)
+
+        # Log the failure
+        logger.error(
+            f"FAILED [{entity_type}:{entity_id}] {operation}: {error_message}"
+        )
+
+    def get_summary(self) -> Dict[str, Any]:
+        """
+        Get summary of failed records.
+
+        Returns:
+            Dictionary with counts by entity type and operation
+        """
+        summary = {
+            'total_failures': len(self.failed_records),
+            'output_file': self.output_file,
+            'by_entity_type': {},
+            'by_operation': {}
+        }
+
+        for record in self.failed_records:
+            # Count by entity type
+            entity_type = record['entity_type']
+            if entity_type not in summary['by_entity_type']:
+                summary['by_entity_type'][entity_type] = 0
+            summary['by_entity_type'][entity_type] += 1
+
+            # Count by operation
+            operation = record['operation']
+            if operation not in summary['by_operation']:
+                summary['by_operation'][operation] = 0
+            summary['by_operation'][operation] += 1
+
+        return summary
+
+    def has_failures(self) -> bool:
+        """Return True if any records have failed."""
+        return len(self.failed_records) > 0
+
+    def close(self) -> None:
+        """Close the CSV file handle."""
+        if self._file_handle:
+            self._file_handle.close()
+            self._file_handle = None
+            self._writer = None
+
+        if self.failed_records:
+            logger.warning(
+                f"Sync completed with {len(self.failed_records)} failures. "
+                f"See {self.output_file} for details."
+            )
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - ensure file is closed."""
+        self.close()
+        return False

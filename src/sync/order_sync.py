@@ -10,7 +10,7 @@ from src.clients.epicor_client import EpicorClient
 from src.clients.hubspot_client import HubSpotClient
 from src.transformers.order_transformer import OrderTransformer
 from src.sync.line_item_sync import LineItemSync
-from src.utils.error_handler import ErrorTracker
+from src.utils.error_handler import ErrorTracker, FailedRecordTracker
 
 
 logger = logging.getLogger(__name__)
@@ -22,7 +22,8 @@ class OrderSync:
     def __init__(
         self,
         epicor_client: EpicorClient,
-        hubspot_client: HubSpotClient
+        hubspot_client: HubSpotClient,
+        failed_record_tracker: FailedRecordTracker = None
     ):
         """
         Initialize order sync.
@@ -30,12 +31,14 @@ class OrderSync:
         Args:
             epicor_client: Epicor API client
             hubspot_client: HubSpot API client
+            failed_record_tracker: Optional tracker for failed records (CSV output)
         """
         self.epicor = epicor_client
         self.hubspot = hubspot_client
         self.transformer = OrderTransformer()
         self.line_item_sync = LineItemSync(hubspot_client)
         self.error_tracker = ErrorTracker()
+        self.failed_tracker = failed_record_tracker
 
     def sync_all_orders(
         self,
@@ -87,6 +90,11 @@ class OrderSync:
                 order_num = order.get('OrderNum', 'unknown')
                 logger.error(f"Error syncing order {order_num}: {e}")
                 self.error_tracker.add_error('order', order_num, str(e))
+                if self.failed_tracker:
+                    self.failed_tracker.add_failed_record(
+                        entity_type='order', entity_id=order_num, operation='sync',
+                        error_message=str(e), error_type=type(e).__name__, source_data=order
+                    )
 
         # Summary
         summary = {
@@ -126,6 +134,11 @@ class OrderSync:
         except Exception as e:
             logger.error(f"Transformation error for order {order_num}: {e}")
             self.error_tracker.add_error('order', order_num, f"Transform error: {e}")
+            if self.failed_tracker:
+                self.failed_tracker.add_failed_record(
+                    entity_type='order', entity_id=order_num, operation='transform',
+                    error_message=str(e), error_type=type(e).__name__, source_data=order_data
+                )
             return 'error'
 
         # Check if deal exists in HubSpot
@@ -153,6 +166,12 @@ class OrderSync:
                 order_num,
                 f"Company {customer_num} not found"
             )
+            if self.failed_tracker:
+                self.failed_tracker.add_failed_record(
+                    entity_type='order', entity_id=order_num, operation='associate',
+                    error_message=f"Company {customer_num} not found in HubSpot",
+                    error_type='MissingCompany', source_data=order_data
+                )
             return 'error'
 
         company_id = company['id']
@@ -162,22 +181,34 @@ class OrderSync:
             deal_id = existing_deal['id']
             result = self.hubspot.update_deal(deal_id, properties)
             if result:
-                logger.info(f"✅ Updated order {order_num}")
+                logger.info(f"Updated order {order_num}")
                 action = 'updated'
             else:
-                logger.error(f"❌ Failed to update order {order_num}")
+                logger.error(f"Failed to update order {order_num}")
                 self.error_tracker.add_error('order', order_num, "HubSpot update failed")
+                if self.failed_tracker:
+                    self.failed_tracker.add_failed_record(
+                        entity_type='order', entity_id=order_num, operation='update',
+                        error_message='HubSpot update failed', error_type='HubSpotAPIError',
+                        source_data=order_data
+                    )
                 return 'error'
         else:
             # Create new deal
             result = self.hubspot.create_deal(properties)
             if result:
                 deal_id = result['id']
-                logger.info(f"✅ Created order {order_num}")
+                logger.info(f"Created order {order_num}")
                 action = 'created'
             else:
-                logger.error(f"❌ Failed to create order {order_num}")
+                logger.error(f"Failed to create order {order_num}")
                 self.error_tracker.add_error('order', order_num, "HubSpot create failed")
+                if self.failed_tracker:
+                    self.failed_tracker.add_failed_record(
+                        entity_type='order', entity_id=order_num, operation='create',
+                        error_message='HubSpot create failed', error_type='HubSpotAPIError',
+                        source_data=order_data
+                    )
                 return 'error'
 
         # Always ensure association exists (for both create and update)
