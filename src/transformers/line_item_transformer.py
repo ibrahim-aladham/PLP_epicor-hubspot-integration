@@ -155,7 +155,8 @@ class LineItemTransformer(BaseTransformer):
         self,
         part_num: str,
         line_desc: Optional[str] = None,
-        price: float = None
+        price: float = None,
+        cost: float = None
     ) -> Dict[str, Any]:
         """
         Create minimal product properties for auto-creation.
@@ -165,11 +166,13 @@ class LineItemTransformer(BaseTransformer):
         - name (required)
         - description
         - price (optional)
+        - hs_cost_of_goods_sold (optional) - Unit cost
 
         Args:
             part_num: Part number (SKU)
             line_desc: Line description
             price: Unit price (optional)
+            cost: Unit cost (optional) - maps to hs_cost_of_goods_sold
 
         Returns:
             Minimal product properties
@@ -187,5 +190,9 @@ class LineItemTransformer(BaseTransformer):
         # Add price if provided
         if price is not None:
             properties['price'] = price
+
+        # Add cost if provided
+        if cost is not None:
+            properties['hs_cost_of_goods_sold'] = cost
 
         return properties

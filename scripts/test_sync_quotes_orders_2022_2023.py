@@ -34,27 +34,27 @@ CUSTOMER_NUMS = CUSTOMER_NUMS_2022 + CUSTOMER_NUMS_2023
 # Customer mapping: CustNum -> HubSpot Company ID
 CUSTOMER_HUBSPOT_MAP = {
     # 2022 customers
-    1358: "135816807393",  # PROCAN POWER SYSTEMS LTD.
-    1359: "135888753609",  # Kukielka Produce Inc.
-    1360: "134955816899",  # EECOL ELECTRIC CORP.
-    1361: "135888753610",  # Guillevin
-    1363: "137366758337",  # ALU MC3
-    1365: "137366758338",  # Les services marins Gilles Tougas
-    1366: "137368556528",  # Pro Ballast Inc
-    1367: "134955816900",  # EECOL ELECTRIC CORP
-    1369: "137015704566",  # Industries Précision Plus Inc
-    1370: "137272930235",  # EECOL ELECTRIC CORP-THOMPSON
+    1358: "156200332253",  # PROCAN POWER SYSTEMS LTD.
+    1359: "156032027580",  # Kukielka Produce Inc.
+    1360: "156200332254",  # EECOL ELECTRIC CORP.
+    1361: "156144844784",  # Guillevin
+    1363: "156104029152",  # ALU MC3
+    1365: "156105835481",  # Les services marins Gilles Tougas
+    1366: "156194931690",  # Pro Ballast Inc
+    1367: "156209305581",  # EECOL ELECTRIC CORP
+    1369: "156135870445",  # Industries Précision Plus Inc
+    1370: "156207509460",  # EECOL ELECTRIC CORP-THOMPSON
     # 2023 customers
-    1384: "137366758339",  # Wesbell Technologies West Inc
-    1385: "137272930237",  # Valmont Industries, Inc.
-    1386: "137364957177",  # Electrostatics Kft.
-    1387: "137015704567",  # Enginomix Consulting Inc.
-    1388: "137352518633",  # Nbisiing Power
-    1390: "137210762199",  # AFC INDUSTRIES INC
-    1391: "136755410878",  # Wood PLC
-    1392: "137366758340",  # LEADING AHEAD ENERGY
-    1393: "136237171647",  # Énergie CPG Est / Composite Power Group
-    1394: "137278324723",  # Capital Power
+    1384: "156194931693",  # Wesbell Technologies West Inc
+    1385: "156141268974",  # Valmont Industries, Inc.
+    1386: "156207509461",  # Electrostatics Kft.
+    1387: "156032027581",  # Enginomix Consulting Inc.
+    1388: "156135870447",  # Nbisiing Power
+    1390: "156194931694",  # AFC INDUSTRIES INC
+    1391: "156135870448",  # Wood PLC
+    1392: "156194931695",  # LEADING AHEAD ENERGY
+    1393: "156202130390",  # Énergie CPG Est / Composite Power Group
+    1394: "156144844785",  # Capital Power
 }
 
 # Max quotes/orders per customer

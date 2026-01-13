@@ -74,10 +74,12 @@ class LineItemSync:
                     continue
 
                 # Ensure product exists (create if needed)
+                # Pass cost (hs_cost_of_goods_sold) so product also gets the unit cost
                 product_created = self.ensure_product_exists(
                     sku,
                     properties.get('description'),
-                    properties.get('price')
+                    properties.get('price'),
+                    properties.get('hs_cost_of_goods_sold')
                 )
                 if product_created:
                     product_created_count += 1
@@ -164,10 +166,12 @@ class LineItemSync:
                     continue
 
                 # Ensure product exists (create if needed)
+                # Pass cost if available (orders may not have cost mapped)
                 product_created = self.ensure_product_exists(
                     sku,
                     properties.get('description'),
-                    properties.get('price')
+                    properties.get('price'),
+                    properties.get('hs_cost_of_goods_sold')
                 )
                 if product_created:
                     product_created_count += 1
@@ -223,7 +227,8 @@ class LineItemSync:
         self,
         sku: str,
         description: str = None,
-        price: float = None
+        price: float = None,
+        cost: float = None
     ) -> bool:
         """
         Ensure product exists in HubSpot, create if not.
@@ -237,6 +242,7 @@ class LineItemSync:
             sku: Product SKU
             description: Product description (optional)
             price: Unit price (optional)
+            cost: Unit cost (optional) - maps to hs_cost_of_goods_sold
 
         Returns:
             True if product was created, False if already existed
@@ -249,7 +255,7 @@ class LineItemSync:
         product = self.hubspot.get_product_by_sku(sku)
 
         # Get product properties
-        properties = self.transformer.get_minimal_product_properties(sku, description, price)
+        properties = self.transformer.get_minimal_product_properties(sku, description, price, cost)
 
         if product:
             # Product exists, update it

@@ -47,29 +47,29 @@ class TestOrderTransformer:
         assert result['epicor_open_order'] == True
         assert result['deal_currency_code_'] == 'CAD'
 
-        # Verify stage (new order with no shipments)
-        assert result['dealstage'] == 'order_received'
+        # Verify stage (new order with no shipments) - HubSpot stage ID
+        assert result['dealstage'] == 'appointmentscheduled'  # order_received
 
     def test_stage_derivation_cancelled(self, transformer, sample_order):
         """Test: VoidOrder=true → cancelled."""
         sample_order['VoidOrder'] = True
 
         result = transformer.transform(sample_order)
-        assert result['dealstage'] == 'cancelled'
+        assert result['dealstage'] == 'closedlost'  # cancelled
 
     def test_stage_derivation_completed(self, transformer, sample_order):
         """Test: OpenOrder=false → completed."""
         sample_order['OpenOrder'] = False
 
         result = transformer.transform(sample_order)
-        assert result['dealstage'] == 'completed'
+        assert result['dealstage'] == 'closedwon'  # completed
 
     def test_stage_derivation_held(self, transformer, sample_order):
         """Test: OrderHeld=true → order_held."""
         sample_order['OrderHeld'] = True
 
         result = transformer.transform(sample_order)
-        assert result['dealstage'] == 'order_held'
+        assert result['dealstage'] == 'qualifiedtobuy'  # order_held
 
     def test_stage_derivation_partially_shipped(self, transformer, sample_order):
         """Test: OpenOrder=true AND TotalShipped>0 → partially_shipped."""
@@ -77,7 +77,7 @@ class TestOrderTransformer:
         sample_order['TotalShipped'] = 5000
 
         result = transformer.transform(sample_order)
-        assert result['dealstage'] == 'partially_shipped'
+        assert result['dealstage'] == 'presentationscheduled'  # partially_shipped
 
     def test_stage_derivation_order_received(self, transformer, sample_order):
         """Test: Default state → order_received."""
@@ -87,7 +87,7 @@ class TestOrderTransformer:
         sample_order['VoidOrder'] = False
 
         result = transformer.transform(sample_order)
-        assert result['dealstage'] == 'order_received'
+        assert result['dealstage'] == 'appointmentscheduled'  # order_received
 
     def test_get_customer_num(self, transformer, sample_order):
         """Test getting customer number for association."""

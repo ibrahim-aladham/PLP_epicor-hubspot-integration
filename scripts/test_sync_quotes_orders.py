@@ -33,26 +33,26 @@ from src.utils.logger import setup_logging
 
 # Customer mapping: CustNum -> HubSpot Company ID (verified 2025-12-09)
 CUSTOMER_HUBSPOT_MAP = {
-    7: "131734023160",    # Westower Communications - Anjou
-    8: "131717829577",    # Bell Canada - Pembroke
-    9: "131753802711",    # Apt Prophet Technologies
-    10: "131753802712",   # TVC Communications Canada
-    11: "131689364416",   # Advanced Tower Services (2007) Ltd.
-    12: "131728620508",   # Amtelecom Inc.
-    13: "131723226055",   # Andec Agencies Ltd.
-    14: "131717829579",   # Preformed Line Products (Spain S.A.) Apresa
-    15: "131741214656",   # MTS Allstream Inc.
-    16: "131691154399",   # Bell Canada
-    17: "131793169369",   # Anixter Power Solutions Canada
-    18: "131717829580",   # Burlington H.E.C.
-    19: "131703730117",   # GrandBridge Energy
-    20: "131726817254",   # Canadian Niagara Power Co.
-    21: "131897489392",   # CapTel Inc.
-    22: "131703730118",   # City of Thunder Bay
-    23: "131902931898",   # Communications & Cabling Contractors Inc.
-    29: "131793169370",   # Bell - London
-    30: "131789572085",   # Expertech - Newmarket
-    31: "131726817255",   # Expertech - Purchasing
+    7: "156202130372",    # Westower Communications - Anjou
+    8: "156137668560",    # Bell Canada - Pembroke
+    9: "156135870429",    # Apt Prophet Technologies
+    10: "156104029131",   # TVC Communications Canada
+    11: "156144844767",   # Advanced Tower Services (2007) Ltd.
+    12: "156141268962",   # Amtelecom Inc.
+    13: "156194931675",   # Andec Agencies Ltd.
+    14: "156200332242",   # Preformed Line Products (Spain S.A.) Apresa
+    15: "156104029133",   # MTS Allstream Inc.
+    16: "156144844771",   # Bell Canada
+    17: "156198529993",   # Anixter Power Solutions Canada
+    18: "156141268968",   # Burlington H.E.C.
+    19: "156135870432",   # GrandBridge Energy
+    20: "156139467762",   # Canadian Niagara Power Co.
+    21: "156141268969",   # CapTel Inc.
+    22: "156139467763",   # City of Thunder Bay
+    23: "156139467764",   # Communications & Cabling Contractors Inc.
+    29: "156207507431",   # Bell - London
+    30: "156139467765",   # Expertech - Newmarket
+    31: "156198529995",   # Expertech - Purchasing
 }
 
 CUSTOMER_NUMS = list(CUSTOMER_HUBSPOT_MAP.keys())

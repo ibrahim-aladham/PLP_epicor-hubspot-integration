@@ -58,24 +58,25 @@ class TestQuoteTransformer:
         assert result['epicor_converted_to_order'] == False
         assert result['epicor_expired'] == False
 
-        # Verify stage is set (Quoted=true → quote_sent)
-        assert result['dealstage'] == 'quote_sent'
+        # Verify stage is set (Quoted=true → quote_sent) - HubSpot stage ID
+        assert result['dealstage'] == '2008968143'  # quote_sent
 
     def test_transform_updates_existing_quote(self, transformer, sample_quote):
         """Test transformation of existing quote with stage update."""
         # Quote is currently at quote_created, should update to quote_sent
-        result = transformer.transform(sample_quote, current_hubspot_stage='quote_created')
+        # Pass stage ID, not internal name
+        result = transformer.transform(sample_quote, current_hubspot_stage='2008968141')  # quote_created
 
-        # Stage should be updated
-        assert result['dealstage'] == 'quote_sent'
+        # Stage should be updated - returns HubSpot stage ID
+        assert result['dealstage'] == '2008968143'  # quote_sent
 
     def test_transform_blocks_backward_stage_movement(self, transformer, sample_quote):
         """Test that backward stage movement is blocked."""
         # Modify quote to be in initial state
         sample_quote['Quoted'] = False
 
-        # Current stage is quote_sent, new stage would be quote_created
-        result = transformer.transform(sample_quote, current_hubspot_stage='quote_sent')
+        # Current stage is quote_sent (ID), new stage would be quote_created
+        result = transformer.transform(sample_quote, current_hubspot_stage='2008968143')  # quote_sent
 
         # Stage should not be present (blocked)
         assert 'dealstage' not in result
@@ -85,10 +86,10 @@ class TestQuoteTransformer:
         # Quote is closed won
         sample_quote['Ordered'] = True
 
-        result = transformer.transform(sample_quote, current_hubspot_stage='quote_sent')
+        result = transformer.transform(sample_quote, current_hubspot_stage='2008968143')  # quote_sent
 
-        # Stage should be updated to closedwon
-        assert result['dealstage'] == 'closedwon'
+        # Stage should be updated to closedwon - HubSpot stage ID
+        assert result['dealstage'] == '2008968146'  # closedwon
 
     def test_get_customer_num(self, transformer, sample_quote):
         """Test getting customer number for association."""
