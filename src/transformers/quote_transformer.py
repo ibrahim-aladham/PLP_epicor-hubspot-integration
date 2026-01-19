@@ -203,28 +203,29 @@ class QuoteTransformer(BaseTransformer):
         """
         Transform Epicor quote to HubSpot deal properties.
 
-        MAPPING (21 ACTIVE FIELDS):
-        1. QuoteNum � dealname
-        2. QuoteNum � epicor_quote_number (PRIMARY)
-        3. CustNum � (association)
-        4. EntryDate � createdate
-        5. DueDate � closedate
-        6. ExpirationDate � quote_expiration_date
-        7. DateQuoted � quote_sent_date
-        8. QuoteAmt � amount
-        9. DocQuoteAmt � epicor_doc_amount
-        10. PONum � customer_po_number
-        11. Boolean flags � dealstage (using approved logic)
-        12. Quoted � epicor_quoted
-        13. QuoteClosed � epicor_closed
-        14. Ordered � epicor_converted_to_order
-        15. Expired � epicor_expired
-        16. DiscountPercent � discount_percentage
-        17. CurrencyCode � deal_currency_code_
-        18. SysRowID � epicor_quote_sysrowid
-        19. SalesRepCode � epicor_sales_rep_code
-        20. SalesRepCode � hubspot_owner_id (if mapped)
-        21. (hardcoded) � pipeline
+        MAPPING (22 ACTIVE FIELDS):
+        1. QuoteNum -> dealname
+        2. QuoteNum -> epicor_quote_number (PRIMARY)
+        3. CustNum -> (association)
+        4. EntryDate -> createdate
+        5. DueDate -> closedate
+        6. ExpirationDate -> quote_expiration_date
+        7. DateQuoted -> quote_sent_date
+        8. QuoteAmt -> amount
+        9. DocQuoteAmt -> epicor_doc_amount
+        10. PONum -> customer_po_number
+        11. Boolean flags -> dealstage (using approved logic)
+        12. Quoted -> epicor_quoted
+        13. QuoteClosed -> epicor_closed
+        14. Ordered -> epicor_converted_to_order
+        15. Expired -> epicor_expired
+        16. DiscountPercent -> discount_percentage
+        17. CurrencyCode -> deal_currency_code_
+        18. SysRowID -> epicor_quote_sysrowid
+        19. SalesRepCode -> epicor_sales_rep_code
+        20. SalesRepCode -> hubspot_owner_id (if mapped)
+        21. Character03 -> epicor_project (UD field)
+        22. (hardcoded) -> pipeline
 
         Args:
             quote_data: Epicor quote record
@@ -255,7 +256,7 @@ class QuoteTransformer(BaseTransformer):
         sales_rep_code = self.safe_get(quote_data, 'SalesRepCode')
         hubspot_owner = settings.get_hubspot_owner(sales_rep_code)
 
-        # Build properties (21 fields)
+        # Build properties (22 fields)
         properties = {
             # 1-2. Deal identification
             'dealname': f"Quote #{quote_data['QuoteNum']}",
@@ -283,9 +284,10 @@ class QuoteTransformer(BaseTransformer):
             'epicor_doc_amount': self.safe_get(quote_data, 'DocQuoteAmt'),
             'discount_percentage': self.safe_get(quote_data, 'DiscountPercent'),
 
-            # 10, 17. References
+            # 10, 17, 21. References
             'customer_po_number': self.safe_get(quote_data, 'PONum'),
             'deal_currency_code_': self.safe_get(quote_data, 'CurrencyCode'),
+            'epicor_project': self.safe_get(quote_data, 'Character03'),
 
             # 12-15. Boolean flags
             'epicor_quoted': self.safe_get(quote_data, 'Quoted', False),
