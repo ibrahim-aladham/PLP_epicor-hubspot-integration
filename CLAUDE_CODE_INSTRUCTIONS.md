@@ -7,7 +7,7 @@
 **Sales Rep:** Sabrina  
 **Objective:** One-way data synchronization from Epicor ERP to HubSpot CRM  
 **Sync Frequency:** Daily at 2 AM EST  
-**Deployment:** AWS Lambda (Serverless)
+**Deployment:** Azure Functions (Serverless)
 
 ### Key Requirements (from Collins' Scope)
 - **One-way sync**: Epicor → HubSpot only (Epicor remains the primary system)
@@ -26,14 +26,17 @@
 ### Technology Stack
 ```yaml
 Language: Python 3.11
-Cloud: AWS (Lambda, S3, CloudWatch, Secrets Manager)
-APIs: 
+Cloud: Azure (Functions, Blob Storage, Application Insights, Key Vault)
+APIs:
   - Epicor REST API v2 (OData v4)
   - HubSpot REST API v3/v4
 Dependencies:
   - requests: 2.31.0
   - python-dotenv: 1.0.0
-  - boto3: 1.34.0
+  - azure-functions: 1.17.0
+  - azure-identity: 1.15.0
+  - azure-keyvault-secrets: 4.7.0
+  - azure-storage-blob: 12.19.0
   - pydantic: 2.5.0
 Development:
   - Docker: Local testing
@@ -45,14 +48,14 @@ Development:
 ### Architecture Diagram
 ```
 ┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
-│   Epicor ERP    │─────▶│  AWS Lambda     │─────▶│    HubSpot      │
+│   Epicor ERP    │─────▶│ Azure Functions │─────▶│    HubSpot      │
 │   (REST API)    │      │  (Python App)   │      │    (REST API)   │
 └─────────────────┘      └─────────────────┘      └─────────────────┘
                                │     │
                                ▼     ▼
                          ┌──────┐ ┌──────────┐
-                         │  S3  │ │CloudWatch│
-                         │ Logs │ │  Events  │
+                         │ Blob │ │   App    │
+                         │ Stor.│ │ Insights │
                          └──────┘ └──────────┘
 ```
 
@@ -65,9 +68,12 @@ Create the following directory structure exactly:
 ```
 epicor-hubspot-integration/
 │
+├── function_app.py               # Azure Functions entry point (v2 programming model)
+├── host.json                     # Azure Functions host configuration
+│
 ├── src/                          # Source code
 │   ├── __init__.py
-│   ├── main.py                   # Lambda handler entry point
+│   ├── main.py                   # Sync entry point
 │   ├── config.py                 # Configuration management
 │   │
 │   ├── clients/                  # API clients
@@ -127,10 +133,8 @@ epicor-hubspot-integration/
 │   ├── Dockerfile               # Container definition
 │   └── docker-compose.yml      # Local development setup
 │
-├── aws/                         # AWS configuration
-│   ├── lambda_function.zip     # Deployment package (generated)
-│   ├── cloudformation.yml      # Infrastructure as code
-│   └── iam_policy.json         # Lambda IAM permissions
+├── azure/                       # Azure configuration
+│   └── arm-template.json       # Infrastructure as code (ARM template)
 │
 ├── docs/                        # Documentation
 │   ├── API_REFERENCE.md        # API documentation
@@ -142,6 +146,7 @@ epicor-hubspot-integration/
 │
 ├── .env.example                 # Environment template
 ├── .gitignore                   # Git ignore rules
+├── local.settings.json          # Azure Functions local dev settings (git ignored)
 ├── requirements.txt             # Python dependencies
 ├── requirements-dev.txt        # Development dependencies
 ├── pytest.ini                   # Pytest configuration
@@ -414,7 +419,10 @@ def get_order_stage(order):
    ```
    requests==2.31.0
    python-dotenv==1.0.0
-   boto3==1.34.0
+   azure-functions==1.17.0
+   azure-identity==1.15.0
+   azure-keyvault-secrets==4.7.0
+   azure-storage-blob==12.19.0
    pydantic==2.5.0
    ```
 
@@ -442,9 +450,9 @@ def get_order_stage(order):
    HUBSPOT_QUOTES_PIPELINE_ID=quotes_pipeline_id
    HUBSPOT_ORDERS_PIPELINE_ID=orders_pipeline_id
 
-   # AWS Configuration
-   AWS_REGION=us-east-1
-   S3_BUCKET=epicor-hubspot-sync-logs
+   # Azure Configuration
+   AZURE_KEYVAULT_URL=https://your-keyvault-name.vault.azure.net/
+   AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=...
 
    # Sync Configuration
    BATCH_SIZE=100
@@ -477,8 +485,8 @@ def get_order_stage(order):
    config/*.env
    !config/dev.env.example
 
-   # AWS
-   aws/lambda_function.zip
+   # Azure Functions
+   local.settings.json
 
    # Logs
    logs/
@@ -528,9 +536,9 @@ class Settings(BaseSettings):
     hubspot_quotes_pipeline_id: str = Field(..., env="HUBSPOT_QUOTES_PIPELINE_ID")
     hubspot_orders_pipeline_id: str = Field(..., env="HUBSPOT_ORDERS_PIPELINE_ID")
     
-    # AWS Configuration
-    aws_region: str = Field(default="us-east-1", env="AWS_REGION")
-    s3_bucket: str = Field(..., env="S3_BUCKET")
+    # Azure Configuration
+    azure_keyvault_url: str = Field(..., env="AZURE_KEYVAULT_URL")
+    azure_storage_connection_string: str = Field(..., env="AZURE_STORAGE_CONNECTION_STRING")
     
     # Sync Configuration
     batch_size: int = Field(default=100, env="BATCH_SIZE")
@@ -1193,57 +1201,68 @@ class SyncManager:
 
 ---
 
-### Phase 6: Lambda Handler (4 hours)
+### Phase 6: Azure Functions Entry Point (4 hours)
 
-#### `src/main.py`
+#### `function_app.py`
 
 ```python
-"""AWS Lambda handler for Epicor-HubSpot sync."""
+"""Azure Functions entry point for Epicor-HubSpot sync (v2 programming model)."""
 import logging
 import json
-from typing import Dict, Any
-from .config import get_settings
-from .sync.sync_manager import SyncManager
-from .utils.logger import setup_logging
+import azure.functions as func
+from src.config import get_settings
+from src.sync.sync_manager import SyncManager
+from src.utils.logger import setup_logging
+
+app = func.FunctionApp()
 
 
-def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """Lambda function handler."""
-    # Setup logging
+@app.timer_trigger(schedule="0 0 7 * * *", arg_name="timer", run_on_startup=False)
+def daily_sync(timer: func.TimerRequest) -> None:
+    """Timer trigger - runs daily at 2 AM EST (7 AM UTC)."""
     setup_logging()
     logger = logging.getLogger(__name__)
-    
-    logger.info("Lambda function invoked")
-    logger.info(f"Event: {json.dumps(event)}")
-    
+
+    logger.info("Timer trigger fired for daily sync")
+
+    if timer.past_due:
+        logger.warning("Timer is past due")
+
     try:
-        # Load settings
         settings = get_settings()
-        
-        # Run sync
         manager = SyncManager(settings)
         results = manager.run_daily_sync()
-        
-        return {
-            "statusCode": 200,
-            "body": json.dumps(results)
-        }
-        
+        logger.info(f"Sync completed: {json.dumps(results)}")
     except Exception as e:
-        logger.error(f"Lambda execution failed: {e}", exc_info=True)
-        return {
-            "statusCode": 500,
-            "body": json.dumps({
-                "status": "error",
-                "message": str(e)
-            })
-        }
+        logger.error(f"Sync execution failed: {e}", exc_info=True)
+        raise
 
 
-# For local testing
-if __name__ == "__main__":
-    result = lambda_handler({}, None)
-    print(json.dumps(result, indent=2))
+@app.route(route="sync", methods=["POST"], auth_level=func.AuthLevel.FUNCTION)
+def manual_sync(req: func.HttpRequest) -> func.HttpResponse:
+    """HTTP trigger - allows manual sync via POST request."""
+    setup_logging()
+    logger = logging.getLogger(__name__)
+
+    logger.info("HTTP trigger invoked for manual sync")
+
+    try:
+        settings = get_settings()
+        manager = SyncManager(settings)
+        results = manager.run_daily_sync()
+
+        return func.HttpResponse(
+            json.dumps(results),
+            status_code=200,
+            mimetype="application/json"
+        )
+    except Exception as e:
+        logger.error(f"Sync execution failed: {e}", exc_info=True)
+        return func.HttpResponse(
+            json.dumps({"status": "error", "message": str(e)}),
+            status_code=500,
+            mimetype="application/json"
+        )
 ```
 
 ---
@@ -1373,102 +1392,126 @@ Create comprehensive test suites for all modules.
 
 ```bash
 #!/bin/bash
-# AWS Lambda deployment script
+# Azure Functions deployment script
 
-echo "Building deployment package..."
+set -e
 
-# Create clean directory
-rm -rf build/
-mkdir -p build/
+FUNCTION_APP_NAME="epicor-hubspot-sync-production"
 
-# Copy source code
-cp -r src/ build/
+echo "Deploying to Azure Functions..."
 
 # Install dependencies
-pip install -r requirements.txt -t build/
+pip install -r requirements.txt
 
-# Create ZIP
-cd build/
-zip -r ../aws/lambda_function.zip .
-cd ..
-
-echo "Deploying to AWS Lambda..."
-
-# Deploy (update with your function name)
-aws lambda update-function-code \
-    --function-name epicor-hubspot-sync \
-    --zip-file fileb://aws/lambda_function.zip
+# Publish to Azure Functions
+func azure functionapp publish "$FUNCTION_APP_NAME" --python
 
 echo "Deployment complete!"
+echo "Function app: $FUNCTION_APP_NAME"
 ```
 
-#### `aws/cloudformation.yml`
+#### `azure/arm-template.json`
 
-```yaml
-AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Epicor-HubSpot Integration Infrastructure'
-
-Resources:
-  SyncFunction:
-    Type: AWS::Lambda::Function
-    Properties:
-      FunctionName: epicor-hubspot-sync
-      Runtime: python3.11
-      Handler: src.main.lambda_handler
-      Role: !GetAtt LambdaExecutionRole.Arn
-      Timeout: 900  # 15 minutes
-      MemorySize: 512
-      Environment:
-        Variables:
-          LOG_LEVEL: INFO
-  
-  DailySchedule:
-    Type: AWS::Events::Rule
-    Properties:
-      Description: 'Trigger sync daily at 2 AM EST'
-      ScheduleExpression: 'cron(0 7 * * ? *)'  # 2 AM EST = 7 AM UTC
-      State: ENABLED
-      Targets:
-        - Arn: !GetAtt SyncFunction.Arn
-          Id: SyncFunctionTarget
-  
-  LambdaInvokePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref SyncFunction
-      Action: 'lambda:InvokeFunction'
-      Principal: events.amazonaws.com
-      SourceArn: !GetAtt DailySchedule.Arn
-  
-  LambdaExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: 'sts:AssumeRole'
-      ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
-      Policies:
-        - PolicyName: S3Access
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - 's3:PutObject'
-                  - 's3:GetObject'
-                Resource: 'arn:aws:s3:::epicor-hubspot-sync-logs/*'
-  
-  LogBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: epicor-hubspot-sync-logs
-      VersioningConfiguration:
-        Status: Enabled
+```json
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "functionAppName": {
+      "type": "string",
+      "defaultValue": "epicor-hubspot-sync-production"
+    },
+    "storageAccountName": {
+      "type": "string"
+    },
+    "keyVaultName": {
+      "type": "string"
+    },
+    "appInsightsName": {
+      "type": "string"
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2022-09-01",
+      "name": "[concat(parameters('functionAppName'), '-plan')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Y1",
+        "tier": "Dynamic"
+      },
+      "properties": {
+        "reserved": true
+      },
+      "kind": "linux"
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2022-09-01",
+      "name": "[parameters('functionAppName')]",
+      "location": "[parameters('location')]",
+      "kind": "functionapp,linux",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', concat(parameters('functionAppName'), '-plan'))]"
+      ],
+      "properties": {
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', concat(parameters('functionAppName'), '-plan'))]",
+        "siteConfig": {
+          "pythonVersion": "3.11",
+          "appSettings": [
+            {
+              "name": "AzureWebJobsStorage",
+              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', parameters('storageAccountName'), ';EndpointSuffix=core.windows.net;AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2022-09-01').keys[0].value)]"
+            },
+            {
+              "name": "FUNCTIONS_EXTENSION_VERSION",
+              "value": "~4"
+            },
+            {
+              "name": "FUNCTIONS_WORKER_RUNTIME",
+              "value": "python"
+            },
+            {
+              "name": "APPINSIGHTS_INSTRUMENTATIONKEY",
+              "value": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsName')), '2020-02-02').InstrumentationKey]"
+            },
+            {
+              "name": "LOG_LEVEL",
+              "value": "INFO"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/accessPolicies",
+      "apiVersion": "2022-07-01",
+      "name": "[concat(parameters('keyVaultName'), '/add')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('functionAppName'))]"
+      ],
+      "properties": {
+        "accessPolicies": [
+          {
+            "tenantId": "[subscription().tenantId]",
+            "objectId": "[reference(resourceId('Microsoft.Web/sites', parameters('functionAppName')), '2022-09-01', 'full').identity.principalId]",
+            "permissions": {
+              "secrets": ["get", "list"]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
 ```
 
 ---
@@ -1522,43 +1565,49 @@ print("\n✓ All connections successful!")
 
 ## 🚀 DEPLOYMENT STEPS
 
-1. **Set up AWS environment**
+1. **Set up Azure environment**
    ```bash
-   # Configure AWS CLI
-   aws configure
-   
-   # Create S3 bucket for logs
-   aws s3 mb s3://epicor-hubspot-sync-logs
+   # Log in to Azure CLI
+   az login
+
+   # Create a resource group (if not already created)
+   az group create --name epicor-hubspot-rg --location eastus
    ```
 
-2. **Store secrets in AWS Secrets Manager**
+2. **Store secrets in Azure Key Vault**
    ```bash
-   aws secretsmanager create-secret \
-       --name epicor-hubspot-integration \
-       --secret-string file://secrets.json
+   # Create Key Vault
+   az keyvault create --name epicor-hubspot-kv \
+       --resource-group epicor-hubspot-rg --location eastus
+
+   # Add secrets
+   az keyvault secret set --vault-name epicor-hubspot-kv \
+       --name "EPICOR-API-KEY" --value "your-api-key"
+   az keyvault secret set --vault-name epicor-hubspot-kv \
+       --name "HUBSPOT-API-KEY" --value "your-hubspot-key"
    ```
 
 3. **Deploy infrastructure**
    ```bash
-   aws cloudformation deploy \
-       --template-file aws/cloudformation.yml \
-       --stack-name epicor-hubspot-stack \
-       --capabilities CAPABILITY_IAM
+   az deployment group create \
+       --resource-group epicor-hubspot-rg \
+       --template-file azure/arm-template.json \
+       --parameters functionAppName=epicor-hubspot-sync-production
    ```
 
-4. **Deploy Lambda function**
+4. **Deploy Azure Functions**
    ```bash
-   ./scripts/deploy.sh
+   func azure functionapp publish epicor-hubspot-sync-production --python
    ```
 
-5. **Test Lambda function**
+5. **Test the function**
    ```bash
-   aws lambda invoke \
-       --function-name epicor-hubspot-sync \
-       --payload '{}' \
-       response.json
-   
-   cat response.json
+   # Trigger manual sync via HTTP
+   func azure functionapp logstream epicor-hubspot-sync-production
+
+   # Or invoke the HTTP trigger
+   curl -X POST "https://epicor-hubspot-sync-production.azurewebsites.net/api/sync" \
+       -H "x-functions-key: <your-function-key>"
    ```
 
 ---
@@ -1605,7 +1654,7 @@ help:
 	@echo "  make setup    - Set up development environment"
 	@echo "  make test     - Run all tests"
 	@echo "  make run      - Run sync locally"
-	@echo "  make deploy   - Deploy to AWS"
+	@echo "  make deploy   - Deploy to Azure Functions"
 	@echo "  make clean    - Clean up generated files"
 
 setup:
@@ -1633,7 +1682,7 @@ deploy:
 
 clean:
 	rm -rf build/
-	rm -rf aws/lambda_function.zip
+	rm -rf .python_packages/
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
 ```
@@ -1654,13 +1703,13 @@ One-way data synchronization from Epicor ERP to HubSpot CRM for PLP Canada.
 3. Configure `.env` file
 4. Run `make test`
 5. Run `make run` (local test)
-6. Run `make deploy` (AWS deployment)
+6. Run `make deploy` (Azure deployment)
 
 ## Architecture
 
 - **Source:** Epicor REST API v2 (OData v4)
 - **Target:** HubSpot REST API v3/v4
-- **Runtime:** AWS Lambda (Python 3.11)
+- **Runtime:** Azure Functions (Python 3.11)
 - **Schedule:** Daily at 2 AM EST
 
 ## Data Flow
@@ -1686,11 +1735,11 @@ python -m src.main
 ## Deployment
 
 ```bash
-# Deploy to AWS Lambda
+# Deploy to Azure Functions
 make deploy
 
 # View logs
-aws logs tail /aws/lambda/epicor-hubspot-sync --follow
+func azure functionapp logstream epicor-hubspot-sync-production
 ```
 
 ## Support
@@ -1706,7 +1755,7 @@ Contact: [Your contact info]
 2. **Pipeline IDs**: Both Quotes and Orders pipeline IDs must be configured
 3. **API Keys**: Both Epicor API key and HubSpot API key required
 4. **Sync Order**: Must sync in order: Parts → Customers → Contacts → Quotes/Orders
-5. **Error Handling**: Robust error logging to S3 for debugging
+5. **Error Handling**: Robust error logging to Azure Blob Storage for debugging
 6. **Rate Limiting**: Respect HubSpot rate limits (100 req/10 sec)
 7. **Pagination**: Handle Epicor pagination with $top and $skip
 8. **Associations**: Create associations AFTER creating objects

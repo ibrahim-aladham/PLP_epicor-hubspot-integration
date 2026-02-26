@@ -1,6 +1,6 @@
 # Deployment Guide - Epicor-HubSpot Integration
 
-This guide covers deploying the integration to AWS Lambda and local development setup.
+This guide covers deploying the integration to Azure Functions and local development setup.
 
 ---
 
@@ -8,7 +8,7 @@ This guide covers deploying the integration to AWS Lambda and local development 
 
 - [Prerequisites](#prerequisites)
 - [Local Development](#local-development)
-- [AWS Lambda Deployment](#aws-lambda-deployment)
+- [Azure Functions Deployment](#azure-functions-deployment)
 - [Configuration](#configuration)
 - [Testing](#testing)
 - [Monitoring](#monitoring)
@@ -19,10 +19,10 @@ This guide covers deploying the integration to AWS Lambda and local development 
 
 ### Required Accounts & Access
 
--  AWS Account with Lambda permissions
--  Epicor ERP access with API credentials
--  HubSpot account with Private App created
--  Python 3.9+ installed locally
+-  Azure subscription with permissions to create Function Apps, Key Vault, and Storage
+-  Epicor ERP access with API credentials
+-  HubSpot account with Private App created
+-  Python 3.9+ installed locally
 
 ### Required Tools
 
@@ -33,8 +33,11 @@ python --version
 # pip (Python package manager)
 pip --version
 
-# AWS CLI (for Lambda deployment)
-aws --version
+# Azure CLI (for Azure deployment)
+az --version
+
+# Azure Functions Core Tools (for local dev and deployment)
+func --version
 
 # Optional: virtualenv
 pip install virtualenv
@@ -126,95 +129,106 @@ Edit `config/sales_rep_mapping.json`:
 ```
 
 **To get HubSpot Owner IDs:**
-1. Go to HubSpot � Settings � Users & Teams
-2. Click on user � Copy Owner ID from URL
+1. Go to HubSpot > Settings > Users & Teams
+2. Click on user > Copy Owner ID from URL
 
 ### 6. Run Locally
 
 ```bash
-# Run sync
+# Run sync directly
 python -m src.main
 
 # With debug logging
 LOG_LEVEL=DEBUG python -m src.main
+
+# Run via Azure Functions Core Tools (uses local.settings.json)
+func start
 ```
 
 ---
 
-## AWS Lambda Deployment
+## Azure Functions Deployment
 
-### Method 1: Manual Deployment (via AWS Console)
-
-#### Step 1: Create Deployment Package
+### Method 1: Deploy Script (Recommended)
 
 ```bash
-# Create clean deployment directory
-mkdir lambda-package
-cd lambda-package
-
-# Install dependencies
-pip install -r ../requirements.txt -t .
-
-# Copy source code
-cp -r ../src .
-cp -r ../config .
-
-# Create ZIP file
-zip -r ../deployment-package.zip .
-
-# Go back to project root
-cd ..
+# Deploy to Azure Functions
+cd scripts && ./deploy.sh
 ```
 
-#### Step 2: Create Lambda Function
+The deploy script uses `func azure functionapp publish epicor-hubspot-sync-production` under the hood.
 
-1. Go to **AWS Lambda Console**
-2. Click **Create function**
-3. Choose:
-   - Function name: `epicor-hubspot-integration`
-   - Runtime: **Python 3.9** (or 3.10/3.11)
-   - Architecture: **x86_64**
-   - Permissions: Create new role with basic Lambda permissions
+### Method 2: Azure Functions Core Tools (Manual)
 
-4. Click **Create function**
+#### Step 1: Create Azure Resources
 
-#### Step 3: Upload Code
+Create the required Azure resources using the ARM template:
 
-1. In Lambda function page, click **Upload from** � **.zip file**
-2. Upload `deployment-package.zip`
-3. Click **Save**
+```bash
+# Create resource group
+az group create \
+  --name epicor-hubspot-rg \
+  --location canadacentral
 
-#### Step 4: Create Secret in AWS Secrets Manager
+# Deploy ARM template (creates Function App, Key Vault, Storage, App Insights)
+az deployment group create \
+  --resource-group epicor-hubspot-rg \
+  --template-file azure/arm-template.json \
+  --parameters environment=production
+```
 
-**Important:** Do NOT store credentials as Lambda environment variables. Use Secrets Manager instead.
+#### Step 2: Store Secrets in Azure Key Vault
 
-1. Go to **AWS Secrets Manager** console
-2. Click **Store a new secret**
-3. Choose **Other type of secret**
-4. Enter key/value pairs (or paste JSON):
-   ```json
-   {
-     "EPICOR_BASE_URL": "https://plpc-apperp.preformed.ca/ERP11PROD",
-     "EPICOR_COMPANY": "PLPC",
-     "EPICOR_USERNAME": "your_username",
-     "EPICOR_PASSWORD": "your_password",
-     "EPICOR_API_KEY": "your_api_key",
-     "HUBSPOT_API_KEY": "your_hubspot_token",
-     "HUBSPOT_QUOTES_PIPELINE_ID": "your_quotes_pipeline_id",
-     "HUBSPOT_ORDERS_PIPELINE_ID": "your_orders_pipeline_id"
-   }
-   ```
-5. Name the secret: `epicor-hubspot-credentials-production`
-6. Click **Store**
+**Important:** Do NOT store credentials as Function App application settings. Use Azure Key Vault instead.
 
-#### Step 5: Configure Lambda Environment Variables
+Secrets are stored individually with hyphenated names:
 
-1. Go to **Configuration** → **Environment variables**
-2. Click **Edit** → **Add environment variable**
-3. Add only these non-sensitive variables:
+```bash
+# Set Key Vault name
+KV_NAME="epicor-hs-kv-production"
+
+# Store each secret individually
+az keyvault secret set --vault-name $KV_NAME \
+  --name "epicor-base-url" \
+  --value "https://plpc-apperp.preformed.ca/ERP11PROD"
+
+az keyvault secret set --vault-name $KV_NAME \
+  --name "epicor-company" \
+  --value "PLPC"
+
+az keyvault secret set --vault-name $KV_NAME \
+  --name "epicor-username" \
+  --value "your_username"
+
+az keyvault secret set --vault-name $KV_NAME \
+  --name "epicor-password" \
+  --value "your_password"
+
+az keyvault secret set --vault-name $KV_NAME \
+  --name "epicor-api-key" \
+  --value "your_api_key"
+
+az keyvault secret set --vault-name $KV_NAME \
+  --name "hubspot-api-key" \
+  --value "your_hubspot_token"
+
+az keyvault secret set --vault-name $KV_NAME \
+  --name "hubspot-quotes-pipeline-id" \
+  --value "your_quotes_pipeline_id"
+
+az keyvault secret set --vault-name $KV_NAME \
+  --name "hubspot-orders-pipeline-id" \
+  --value "your_orders_pipeline_id"
+```
+
+#### Step 3: Configure Function App Settings
+
+1. Go to **Function App** in Azure Portal
+2. Navigate to **Configuration** > **Application settings**
+3. Add only these non-sensitive settings:
 
 ```
-AWS_SECRET_NAME = epicor-hubspot-credentials-production
+AZURE_KEYVAULT_URL = https://epicor-hs-kv-production.vault.azure.net/
 LOG_LEVEL = INFO
 ENVIRONMENT = production
 SYNC_BATCH_SIZE = 100
@@ -226,98 +240,40 @@ SYNC_ORDERS = true
 
 4. Click **Save**
 
-The Lambda function will automatically load credentials from Secrets Manager at runtime.
+The Function App will automatically load credentials from Key Vault at runtime via Managed Identity.
 
-#### Step 6: Configure Function Settings
-
-1. **General Configuration**:
-   - Memory: **512 MB** (or more for large datasets)
-   - Timeout: **5 minutes** (or 10 minutes for full sync)
-   - Handler: `src.main.lambda_handler`
-
-2. **VPC** (if Epicor is in VPC):
-   - Select VPC
-   - Select subnets
-   - Select security groups
-
-#### Step 7: Test Function
-
-1. Click **Test** tab
-2. Create new test event:
-   ```json
-   {
-     "operation": "full_sync"
-   }
-   ```
-3. Click **Test**
-4. Check execution results and logs
-
-### Method 2: AWS CLI Deployment
+#### Step 4: Deploy Function Code
 
 ```bash
-# Create deployment package
-./deploy/create-package.sh
-
-# Create Lambda function
-aws lambda create-function \
-  --function-name epicor-hubspot-integration \
-  --runtime python3.9 \
-  --handler src.main.lambda_handler \
-  --zip-file fileb://deployment-package.zip \
-  --role arn:aws:iam::YOUR_ACCOUNT:role/lambda-execution-role \
-  --timeout 300 \
-  --memory-size 512 \
-  --environment Variables="{EPICOR_BASE_URL=...,HUBSPOT_API_KEY=...}"
-
-# Update function code (for updates)
-aws lambda update-function-code \
-  --function-name epicor-hubspot-integration \
-  --zip-file fileb://deployment-package.zip
+# Publish to Azure Functions
+func azure functionapp publish epicor-hubspot-sync-production
 ```
 
-### Method 3: AWS SAM/Serverless Framework
+#### Step 5: Verify Deployment
 
-Create `template.yaml`:
+1. Go to **Function App** in Azure Portal
+2. Navigate to **Functions**
+3. You should see two functions:
+   - `scheduled_sync` - Timer Trigger (runs on cron schedule)
+   - `manual_sync` - HTTP Trigger (for on-demand sync)
+4. Click **manual_sync** > **Code + Test** > **Test/Run** to trigger a test
 
-```yaml
-AWSTemplateFormatVersion: '2010-09-09'
-Transform: AWS::Serverless-2016-10-31
+#### Test Event (Manual Sync via HTTP Trigger)
 
-Resources:
-  EpicorHubSpotSync:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: epicor-hubspot-integration
-      Handler: src.main.lambda_handler
-      Runtime: python3.9
-      CodeUri: .
-      Timeout: 300
-      MemorySize: 512
-      Environment:
-        Variables:
-          EPICOR_BASE_URL: !Ref EpicorBaseUrl
-          HUBSPOT_API_KEY: !Ref HubSpotApiKey
-          # ... other variables
-      Events:
-        ScheduledSync:
-          Type: Schedule
-          Properties:
-            Schedule: rate(1 hour)  # Run every hour
-
-Parameters:
-  EpicorBaseUrl:
-    Type: String
-  HubSpotApiKey:
-    Type: String
-    NoEcho: true
+```json
+{
+  "operation": "full_sync"
+}
 ```
 
-Deploy:
+### Project Files for Azure Functions
 
-```bash
-sam build
-sam deploy --guided
-```
+The following files support the Azure Functions v2 programming model:
+
+- **`function_app.py`** - Main entry point with `scheduled_sync` (Timer Trigger) and `manual_sync` (HTTP Trigger)
+- **`host.json`** - Azure Functions host configuration
+- **`local.settings.json`** - Local development settings (gitignored)
+- **`azure/arm-template.json`** - ARM template for provisioning Azure resources
 
 ---
 
@@ -325,34 +281,31 @@ sam deploy --guided
 
 ### Getting HubSpot Pipeline IDs
 
-1. Go to HubSpot � **Settings** � **Objects** � **Deals** � **Pipelines**
+1. Go to HubSpot > **Settings** > **Objects** > **Deals** > **Pipelines**
 2. Click on your **Quotes** pipeline
 3. Copy the ID from the URL:
    ```
    https://app.hubspot.com/contacts/12345/objects/0-3/pipelines/6789012
-                                                                 ^^^^^^^
-                                                            This is the ID
+                                                                ^^^^^^^
+                                                           This is the ID
    ```
 4. Repeat for **Orders** pipeline
-5. Update `.env` or Lambda environment variables
+5. Update `.env` or Key Vault secrets
 
 ### Setting Up Scheduled Execution
 
-#### Option 1: EventBridge (CloudWatch Events)
+The scheduled sync is built into the Azure Function as a Timer Trigger. It is defined in `function_app.py` and configured with a cron expression.
 
-1. Go to **EventBridge** � **Rules** � **Create rule**
-2. Define schedule:
-   - **Rate expression**: `rate(1 hour)` (every hour)
-   - **Cron expression**: `cron(0 */4 * * ? *)` (every 4 hours)
-3. Select target: Your Lambda function
-4. Create rule
+**Default schedule:** `0 0 7 * * *` (daily at 7:00 AM UTC)
 
-#### Option 2: Lambda Trigger
+To change the schedule:
 
-1. In Lambda function, click **Add trigger**
-2. Select **EventBridge (CloudWatch Events)**
-3. Create new rule with schedule
-4. Save
+1. Update the cron expression in `function_app.py` for the `scheduled_sync` function
+2. Redeploy with `func azure functionapp publish epicor-hubspot-sync-production`
+
+Alternatively, override via the `SYNC_SCHEDULE` application setting in the Function App configuration.
+
+No external scheduling service (like EventBridge) is needed -- the Timer Trigger is built into Azure Functions.
 
 ---
 
@@ -371,14 +324,15 @@ pytest tests/test_stage_logic.py -v
 pytest tests/ --cov=src --cov-report=html
 ```
 
-### Lambda Testing
+### Azure Functions Testing
 
-#### Test Event (Manual Sync)
+#### Test via HTTP Trigger (Manual Sync)
 
-```json
-{
-  "operation": "full_sync"
-}
+```bash
+# Full sync
+curl -X POST "https://epicor-hubspot-sync-production.azurewebsites.net/api/manual_sync" \
+  -H "Content-Type: application/json" \
+  -d '{"operation": "full_sync"}'
 ```
 
 #### Test Event (Customers Only)
@@ -402,63 +356,73 @@ pytest tests/ --cov=src --cov-report=html
 
 ## Monitoring
 
-### CloudWatch Logs
+### Application Insights
 
-All logs are automatically sent to CloudWatch Logs:
+All logs and telemetry are automatically sent to Application Insights:
 
-1. Go to **CloudWatch** � **Log groups**
-2. Find `/aws/lambda/epicor-hubspot-integration`
-3. View log streams
+1. Go to **Application Insights** in Azure Portal
+2. Navigate to **Logs** (Log Analytics)
+3. Query function execution traces:
+   ```kusto
+   traces
+   | where operation_Name == "scheduled_sync" or operation_Name == "manual_sync"
+   | order by timestamp desc
+   | take 100
+   ```
 
 ### Key Log Messages
 
 ```
- Success indicators:
+ Success indicators:
 - "CUSTOMER SYNC COMPLETE"
 - "QUOTE SYNC COMPLETE"
 - "FULL SYNC COMPLETE"
-- " Created company"
-- " Updated quote"
+- " Created company"
+- " Updated quote"
 
-�  Warning indicators:
+  Warning indicators:
 - "Rep 'XXX' not mapped"
 - "Company not found"
 - "Stage update blocked"
 
-L Error indicators:
+ Error indicators:
 - "Failed to fetch"
 - "Transformation error"
-- "L Failed to create"
+- " Failed to create"
 ```
 
-### CloudWatch Metrics (Custom)
+### Application Insights Metrics (Custom)
 
 Add custom metrics in code:
 
 ```python
-import boto3
+from opencensus.ext.azure import metrics_exporter
+from opencensus.stats import aggregation, measure, stats, view
 
-cloudwatch = boto3.client('cloudwatch')
+# Define a measure
+sync_count_measure = measure.MeasureInt("customers_synced", "Number of customers synced", "customers")
 
-cloudwatch.put_metric_data(
-    Namespace='EpicorHubSpot',
-    MetricData=[
-        {
-            'MetricName': 'CustomersSync',
-            'Value': created_count,
-            'Unit': 'Count'
-        }
-    ]
+# Create and register a view
+sync_count_view = view.View(
+    "customers_synced_count",
+    "Count of customers synced",
+    [],
+    sync_count_measure,
+    aggregation.CountAggregation()
 )
+
+stats.stats.view_manager.register_view(sync_count_view)
 ```
 
 ### Alerts
 
-Create CloudWatch Alarms for:
+Create Azure Monitor Alerts for:
 
-- Lambda errors
+- Function execution failures
 - Execution duration > threshold
 - Custom sync failure metrics
+
+Configure alerts in **Azure Portal** > **Monitor** > **Alerts** > **New alert rule**, targeting the Function App resource.
 
 ---
 
@@ -470,111 +434,101 @@ See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common issues and solutions.
 
 ## Security Best Practices
 
-### 1. Secrets Management (REQUIRED for AWS Lambda)
+### 1. Secrets Management (REQUIRED for Azure Functions)
 
-The integration automatically loads credentials from AWS Secrets Manager when running in Lambda.
-This is the recommended and default approach - **do NOT store credentials in Lambda environment variables**.
+The integration automatically loads credentials from Azure Key Vault when running in Azure Functions.
+This is the recommended and default approach - **do NOT store credentials in Function App application settings**.
 
-#### Step 1: Create the Secret
+#### Step 1: Create the Key Vault and Store Secrets
 
-Create a secret with all credentials in a single JSON object:
+Secrets are stored individually with hyphenated names:
 
 ```bash
-# For production environment
-aws secretsmanager create-secret \
-  --name epicor-hubspot-credentials-production \
-  --description "Epicor and HubSpot API credentials for production" \
-  --secret-string '{
-    "EPICOR_BASE_URL": "https://plpc-apperp.preformed.ca/ERP11PROD",
-    "EPICOR_COMPANY": "PLPC",
-    "EPICOR_USERNAME": "your_epicor_username",
-    "EPICOR_PASSWORD": "your_epicor_password",
-    "EPICOR_API_KEY": "your_epicor_api_key",
-    "HUBSPOT_API_KEY": "your_hubspot_private_app_token",
-    "HUBSPOT_QUOTES_PIPELINE_ID": "your_quotes_pipeline_id",
-    "HUBSPOT_ORDERS_PIPELINE_ID": "your_orders_pipeline_id"
-  }'
+KV_NAME="epicor-hs-kv-production"
 
-# For development/staging (use different secret name)
-aws secretsmanager create-secret \
-  --name epicor-hubspot-credentials-development \
-  --secret-string '{...}'
+# Create Key Vault (if not already created by ARM template)
+az keyvault create \
+  --name $KV_NAME \
+  --resource-group epicor-hubspot-rg \
+  --location canadacentral
+
+# Store each secret
+az keyvault secret set --vault-name $KV_NAME --name "epicor-base-url" --value "https://plpc-apperp.preformed.ca/ERP11PROD"
+az keyvault secret set --vault-name $KV_NAME --name "epicor-company" --value "PLPC"
+az keyvault secret set --vault-name $KV_NAME --name "epicor-username" --value "your_epicor_username"
+az keyvault secret set --vault-name $KV_NAME --name "epicor-password" --value "your_epicor_password"
+az keyvault secret set --vault-name $KV_NAME --name "epicor-api-key" --value "your_epicor_api_key"
+az keyvault secret set --vault-name $KV_NAME --name "hubspot-api-key" --value "your_hubspot_private_app_token"
+az keyvault secret set --vault-name $KV_NAME --name "hubspot-quotes-pipeline-id" --value "your_quotes_pipeline_id"
+az keyvault secret set --vault-name $KV_NAME --name "hubspot-orders-pipeline-id" --value "your_orders_pipeline_id"
 ```
 
-#### Step 2: Verify Secret
+#### Step 2: Verify Secrets
 
 ```bash
-# Verify secret was created
-aws secretsmanager describe-secret \
-  --secret-id epicor-hubspot-credentials-production
+# List all secrets in the vault
+az keyvault secret list --vault-name $KV_NAME --output table
 
-# Test retrieving secret (be careful - outputs sensitive data)
-aws secretsmanager get-secret-value \
-  --secret-id epicor-hubspot-credentials-production \
-  --query 'SecretString' --output text | jq .
+# Retrieve a specific secret (be careful - outputs sensitive data)
+az keyvault secret show --vault-name $KV_NAME --name "epicor-base-url" --query 'value' --output tsv
 ```
 
-#### Step 3: Update Secret (when credentials change)
+#### Step 3: Update Secrets (when credentials change)
 
 ```bash
-aws secretsmanager update-secret \
-  --secret-id epicor-hubspot-credentials-production \
-  --secret-string '{
-    "EPICOR_BASE_URL": "...",
-    ...
-  }'
+az keyvault secret set --vault-name $KV_NAME \
+  --name "epicor-password" \
+  --value "new_password_value"
 ```
 
 #### How It Works
 
-1. Lambda starts with only `AWS_SECRET_NAME` environment variable set
-2. `lambda_handler()` calls `load_secrets_from_aws()` before loading settings
-3. Secrets are fetched from Secrets Manager and set as environment variables
+1. Function App starts with only `AZURE_KEYVAULT_URL` application setting configured
+2. `function_app.py` calls `load_secrets_from_cloud()` before loading settings
+3. Secrets are fetched from Key Vault using Managed Identity and set as environment variables
 4. `Settings()` loads from environment variables via Pydantic
-5. Credentials are never stored in Lambda configuration
+5. Credentials are never stored in Function App configuration
 
-#### Secret Name Convention
+#### Key Vault Name Convention
 
-The CloudFormation template uses environment-specific secret names:
-- Production: `epicor-hubspot-credentials-production`
-- Staging: `epicor-hubspot-credentials-staging`
-- Development: `epicor-hubspot-credentials-development`
+The ARM template uses environment-specific Key Vault names:
+- Production: `epicor-hs-kv-production`
+- Staging: `epicor-hs-kv-staging`
+- Development: `epicor-hs-kv-development`
 
-This is set automatically via the `AWS_SECRET_NAME` Lambda environment variable.
+This is set automatically via the `AZURE_KEYVAULT_URL` application setting.
 
-### 2. IAM Permissions
+### 2. Managed Identity & RBAC
 
-Minimum Lambda execution role:
+The Function App uses a system-assigned Managed Identity to authenticate with Key Vault. No client secrets or certificates are needed.
 
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "logs:CreateLogGroup",
-        "logs:CreateLogStream",
-        "logs:PutLogEvents"
-      ],
-      "Resource": "arn:aws:logs:*:*:*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "secretsmanager:GetSecretValue"
-      ],
-      "Resource": "arn:aws:secretsmanager:*:*:secret:epicor-*"
-    }
-  ]
-}
+Required RBAC role assignments:
+
+```bash
+# Get the Function App's Managed Identity principal ID
+PRINCIPAL_ID=$(az functionapp identity show \
+  --name epicor-hubspot-sync-production \
+  --resource-group epicor-hubspot-rg \
+  --query principalId --output tsv)
+
+# Grant Key Vault Secrets User role
+az role assignment create \
+  --role "Key Vault Secrets User" \
+  --assignee $PRINCIPAL_ID \
+  --scope /subscriptions/<sub-id>/resourceGroups/epicor-hubspot-rg/providers/Microsoft.KeyVault/vaults/epicor-hs-kv-production
+
+# Grant Storage Blob Data Contributor role (for Azure Blob Storage)
+az role assignment create \
+  --role "Storage Blob Data Contributor" \
+  --assignee $PRINCIPAL_ID \
+  --scope /subscriptions/<sub-id>/resourceGroups/epicor-hubspot-rg/providers/Microsoft.Storage/storageAccounts/<storage-account>
 ```
 
 ### 3. Network Security
 
-- Use VPC for Epicor access if required
-- Configure security groups to allow only necessary outbound traffic
-- Use PrivateLink for AWS services if needed
+- Use VNet Integration for Epicor access if required
+- Configure Network Security Groups to allow only necessary outbound traffic
+- Use Private Endpoints for Key Vault and Storage if needed
 
 ---
 
@@ -582,16 +536,30 @@ Minimum Lambda execution role:
 
 If deployment fails:
 
-1. **Revert Lambda code:**
+1. **Redeploy previous version:**
    ```bash
-   aws lambda update-function-code \
-     --function-name epicor-hubspot-integration \
-     --zip-file fileb://previous-deployment-package.zip
+   # Roll back to a previous deployment using git
+   git checkout <previous-commit-hash>
+   func azure functionapp publish epicor-hubspot-sync-production
    ```
 
-2. **Restore environment variables** from previous version
+   Alternatively, if deployment slots are configured:
+   ```bash
+   # Swap staging slot back to production
+   az functionapp deployment slot swap \
+     --name epicor-hubspot-sync-production \
+     --resource-group epicor-hubspot-rg \
+     --slot staging
+   ```
 
-3. **Check CloudWatch logs** for error details
+2. **Restore application settings** from previous version if changed
+
+3. **Check Application Insights logs** for error details:
+   ```kusto
+   exceptions
+   | where timestamp > ago(1h)
+   | order by timestamp desc
+   ```
 
 4. **Test with small dataset** before full sync
 
@@ -601,22 +569,23 @@ If deployment fails:
 
 Before going live:
 
-- [ ] **AWS Secrets Manager secret created** with all credentials:
-  - `epicor-hubspot-credentials-production` created
-  - Contains: EPICOR_BASE_URL, EPICOR_COMPANY, EPICOR_USERNAME, EPICOR_PASSWORD, EPICOR_API_KEY
-  - Contains: HUBSPOT_API_KEY, HUBSPOT_QUOTES_PIPELINE_ID, HUBSPOT_ORDERS_PIPELINE_ID
+- [ ] **Azure Key Vault secrets stored** with all credentials:
+  - Key Vault `epicor-hs-kv-production` created
+  - Contains: `epicor-base-url`, `epicor-company`, `epicor-username`, `epicor-password`, `epicor-api-key`
+  - Contains: `hubspot-api-key`, `hubspot-quotes-pipeline-id`, `hubspot-orders-pipeline-id`
 - [ ] Sales rep mapping file updated with real data (`config/sales_rep_mapping.json`)
-- [ ] HubSpot pipeline IDs verified and added to secret
-- [ ] CloudFormation stack deployed (`make deploy-stack`)
-- [ ] Lambda code deployed (`make deploy`)
-- [ ] Test sync with small dataset (`make invoke`)
-- [ ] CloudWatch alarms configured (included in CloudFormation)
-- [ ] Lambda timeout appropriate for data volume (default: 15 min)
-- [ ] Lambda memory appropriate for data volume (default: 512 MB)
-- [ ] Scheduled trigger configured (default: daily at 2 AM EST)
-- [ ] Error notification setup (SNS/email)
+- [ ] HubSpot pipeline IDs verified and added to Key Vault
+- [ ] ARM template deployed (`az deployment group create --template-file azure/arm-template.json`)
+- [ ] Function App Managed Identity granted Key Vault access
+- [ ] Function code deployed (`func azure functionapp publish epicor-hubspot-sync-production`)
+- [ ] Test sync with small dataset (trigger `manual_sync` HTTP endpoint)
+- [ ] Application Insights alerts configured
+- [ ] Function App timeout appropriate for data volume (default: 10 min)
+- [ ] Function App plan appropriate for data volume (Consumption or Premium)
+- [ ] Timer Trigger schedule configured (default: daily at 7:00 AM UTC -- cron `0 0 7 * * *`)
+- [ ] Error notification setup (Azure Monitor action groups / email)
 - [ ] Documentation shared with team
 
 ---
 
-*Last Updated: November 26, 2025*
+*Last Updated: February 26, 2026*
