@@ -1,10 +1,10 @@
 """
 Main entry point for Epicor-HubSpot integration.
-Can be run locally or as AWS Lambda function.
+Can be run locally or via Azure Functions.
 
-For AWS Lambda:
-- Credentials are loaded from AWS Secrets Manager at runtime
-- Secret name defaults to 'epicor-hubspot-credentials' or AWS_SECRET_NAME env var
+For Azure Functions:
+- Credentials are loaded from Azure Key Vault via Managed Identity
+- See function_app.py for the Azure Functions entry point
 
 For local development:
 - Credentials are loaded from .env file
@@ -17,59 +17,12 @@ from datetime import datetime
 from src.clients.epicor_client import EpicorClient
 from src.clients.hubspot_client import HubSpotClient
 from src.sync.sync_manager import SyncManager
-from src.config import load_secrets_from_aws, get_settings
+from src.config import get_settings
 from src.utils.logger import setup_logger
 
 
 # Module-level logger (basic until settings are loaded)
 logger = logging.getLogger(__name__)
-
-
-def lambda_handler(event, context):
-    """
-    AWS Lambda handler function.
-
-    Loads credentials from AWS Secrets Manager before initializing settings.
-
-    Args:
-        event: Lambda event data
-        context: Lambda context
-
-    Returns:
-        Response dict with statusCode and body
-    """
-    # Step 1: Load secrets from AWS Secrets Manager (before settings init)
-    try:
-        load_secrets_from_aws()
-    except Exception as e:
-        # Log to CloudWatch even without proper logger setup
-        print(f"CRITICAL: Failed to load secrets from AWS Secrets Manager: {e}")
-        return {
-            'statusCode': 500,
-            'body': {'error': f'Failed to load secrets: {str(e)}'}
-        }
-
-    # Step 2: Now we can safely get settings and setup proper logging
-    settings = get_settings()
-    global logger
-    logger = setup_logger("epicor_hubspot_sync", settings.log_level)
-
-    logger.info("Lambda function invoked")
-    logger.info(f"Event: {event}")
-
-    # Step 3: Run the sync
-    try:
-        result = main()
-        return {
-            'statusCode': 200,
-            'body': result
-        }
-    except Exception as e:
-        logger.error(f"Lambda execution failed: {e}", exc_info=True)
-        return {
-            'statusCode': 500,
-            'body': {'error': str(e)}
-        }
 
 
 def main():

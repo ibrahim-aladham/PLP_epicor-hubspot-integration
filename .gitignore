@@ -13,8 +13,8 @@ ENV/
 config/*.env
 !config/dev.env.example
 
-# AWS
-aws/lambda_function.zip
+# Azure
+local.settings.json
 
 # Logs
 logs/

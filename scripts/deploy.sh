@@ -1,5 +1,5 @@
 #!/bin/bash
-# AWS Lambda deployment script for Epicor-HubSpot Integration
+# Azure Functions deployment script for Epicor-HubSpot Integration
 
 set -e  # Exit on error
 
@@ -10,78 +10,80 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Configuration
-FUNCTION_NAME="${FUNCTION_NAME:-epicor-hubspot-sync-production}"
-REGION="${AWS_REGION:-us-east-1}"
-BUILD_DIR="build"
-ZIP_FILE="aws/lambda_function.zip"
+APP_NAME="${AZURE_FUNCTION_APP_NAME:-epicor-hubspot-sync-production}"
+RESOURCE_GROUP="${AZURE_RESOURCE_GROUP:-epicor-hubspot-rg}"
 
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}Epicor-HubSpot Integration Deployment${NC}"
+echo -e "${GREEN}(Azure Functions)${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 
-# Step 1: Clean previous build
-echo -e "${YELLOW}[1/6]${NC} Cleaning previous build..."
-rm -rf "${BUILD_DIR}"
-rm -f "${ZIP_FILE}"
-echo -e "${GREEN}${NC} Build directory cleaned"
-echo ""
+# Step 1: Check prerequisites
+echo -e "${YELLOW}[1/4]${NC} Checking prerequisites..."
 
-# Step 2: Create build directory
-echo -e "${YELLOW}[2/6]${NC} Creating build directory..."
-mkdir -p "${BUILD_DIR}"
-echo -e "${GREEN}${NC} Build directory created"
-echo ""
-
-# Step 3: Copy source code
-echo -e "${YELLOW}[3/6]${NC} Copying source code..."
-cp -r src/ "${BUILD_DIR}/"
-echo -e "${GREEN}${NC} Source code copied"
-echo ""
-
-# Step 4: Install dependencies
-echo -e "${YELLOW}[4/6]${NC} Installing Python dependencies..."
-pip install -r requirements.txt -t "${BUILD_DIR}/" --quiet
-echo -e "${GREEN}${NC} Dependencies installed"
-echo ""
-
-# Step 5: Create deployment package
-echo -e "${YELLOW}[5/6]${NC} Creating deployment package..."
-cd "${BUILD_DIR}"
-zip -r ../${ZIP_FILE} . -q
-cd ..
-ZIP_SIZE=$(du -h "${ZIP_FILE}" | cut -f1)
-echo -e "${GREEN}${NC} Deployment package created (${ZIP_SIZE})"
-echo ""
-
-# Step 6: Deploy to AWS Lambda
-echo -e "${YELLOW}[6/6]${NC} Deploying to AWS Lambda..."
-echo "Function: ${FUNCTION_NAME}"
-echo "Region: ${REGION}"
-
-aws lambda update-function-code \
-    --function-name "${FUNCTION_NAME}" \
-    --zip-file "fileb://${ZIP_FILE}" \
-    --region "${REGION}" \
-    --output table
-
-echo ""
-echo -e "${GREEN}${NC} Deployment completed successfully!"
-echo ""
-
-# Optional: Update environment variables
-read -p "Do you want to update environment variables? (y/N) " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]
-then
-    echo -e "${YELLOW}Updating environment variables...${NC}"
-    aws lambda update-function-configuration \
-        --function-name "${FUNCTION_NAME}" \
-        --environment "Variables={LOG_LEVEL=INFO,ENVIRONMENT=production}" \
-        --region "${REGION}" \
-        --output table
-    echo -e "${GREEN}${NC} Environment variables updated"
+if ! command -v func &> /dev/null; then
+    echo -e "${RED}Error: Azure Functions Core Tools (func) not found.${NC}"
+    echo "Install: npm install -g azure-functions-core-tools@4 --unsafe-perm true"
+    exit 1
 fi
+
+if ! command -v az &> /dev/null; then
+    echo -e "${RED}Error: Azure CLI (az) not found.${NC}"
+    echo "Install: https://docs.microsoft.com/en-us/cli/azure/install-azure-cli"
+    exit 1
+fi
+
+# Verify logged in
+if ! az account show &> /dev/null; then
+    echo -e "${RED}Error: Not logged into Azure CLI. Run 'az login' first.${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}Prerequisites OK${NC}"
+echo ""
+
+# Step 2: Deploy ARM template (if requested)
+if [[ "$1" == "--deploy-infra" ]]; then
+    echo -e "${YELLOW}[2/4]${NC} Deploying ARM template..."
+    echo "Resource Group: ${RESOURCE_GROUP}"
+
+    # Create resource group if it doesn't exist
+    az group create \
+        --name "${RESOURCE_GROUP}" \
+        --location "eastus" \
+        --output none 2>/dev/null || true
+
+    az deployment group create \
+        --resource-group "${RESOURCE_GROUP}" \
+        --template-file azure/arm-template.json \
+        --parameters environmentName=production \
+        --output table
+
+    echo -e "${GREEN}ARM template deployed${NC}"
+    echo ""
+else
+    echo -e "${YELLOW}[2/4]${NC} Skipping infrastructure deployment (use --deploy-infra to deploy ARM template)"
+    echo ""
+fi
+
+# Step 3: Publish function app
+echo -e "${YELLOW}[3/4]${NC} Publishing to Azure Functions..."
+echo "Function App: ${APP_NAME}"
+
+func azure functionapp publish "${APP_NAME}" --python
+
+echo -e "${GREEN}Function app published${NC}"
+echo ""
+
+# Step 4: Verify deployment
+echo -e "${YELLOW}[4/4]${NC} Verifying deployment..."
+
+az functionapp show \
+    --name "${APP_NAME}" \
+    --resource-group "${RESOURCE_GROUP}" \
+    --query "{Name:name, State:state, DefaultHostName:defaultHostName}" \
+    --output table
 
 echo ""
 echo -e "${GREEN}========================================${NC}"
@@ -89,6 +91,7 @@ echo -e "${GREEN}Deployment Complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 echo "Next steps:"
-echo "  1. Test the function: aws lambda invoke --function-name ${FUNCTION_NAME} response.json"
-echo "  2. View logs: aws logs tail /aws/lambda/${FUNCTION_NAME} --follow"
+echo "  1. Test the function: curl https://${APP_NAME}.azurewebsites.net/api/sync?code=<function-key>"
+echo "  2. View logs: az monitor app-insights query --app ${APP_NAME}-insights-production --analytics-query 'traces | order by timestamp desc | take 50'"
+echo "  3. Check timer trigger: az functionapp function show --name ${APP_NAME} --resource-group ${RESOURCE_GROUP} --function-name scheduled_sync"
 echo ""

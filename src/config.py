@@ -4,7 +4,7 @@ Configuration management for Epicor-HubSpot integration.
 This module provides a centralized configuration class that loads settings from
 environment variables using Pydantic for validation and type safety.
 
-In AWS Lambda, credentials are loaded from AWS Secrets Manager.
+In Azure Functions, credentials are loaded from Azure Key Vault via Managed Identity.
 For local development, credentials are loaded from .env file.
 """
 
@@ -19,105 +19,89 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
-# AWS Secrets Manager Integration
+# Azure Key Vault Integration
 # =============================================================================
 
-def load_secrets_from_aws(secret_name: Optional[str] = None) -> bool:
+def load_secrets_from_cloud(vault_url: Optional[str] = None) -> bool:
     """
-    Load secrets from AWS Secrets Manager and set as environment variables.
+    Load secrets from Azure Key Vault and set as environment variables.
 
     This function should be called BEFORE Settings() is instantiated.
-    It detects if running in AWS Lambda and loads credentials from Secrets Manager.
+    It detects if running in Azure Functions and loads credentials from Key Vault.
 
     Args:
-        secret_name: Name of the secret in AWS Secrets Manager.
-                    Defaults to env var AWS_SECRET_NAME or 'epicor-hubspot-credentials'
+        vault_url: URL of the Azure Key Vault.
+                   Defaults to env var AZURE_KEYVAULT_URL.
 
     Returns:
         True if secrets were loaded, False if skipped (local development)
 
-    Expected secret JSON structure:
-    {
-        "EPICOR_BASE_URL": "https://...",
-        "EPICOR_COMPANY": "PLPC",
-        "EPICOR_USERNAME": "...",
-        "EPICOR_PASSWORD": "...",
-        "EPICOR_API_KEY": "...",
-        "HUBSPOT_API_KEY": "...",
-        "HUBSPOT_QUOTES_PIPELINE_ID": "...",
-        "HUBSPOT_ORDERS_PIPELINE_ID": "..."
-    }
+    Expected Key Vault secrets (stored individually, names use hyphens):
+        epicor-base-url, epicor-company, epicor-username, epicor-password,
+        epicor-api-key, hubspot-api-key, hubspot-quotes-pipeline-id,
+        hubspot-orders-pipeline-id
     """
-    # Check if running in AWS Lambda (AWS_LAMBDA_FUNCTION_NAME is set by Lambda runtime)
-    is_lambda = os.environ.get('AWS_LAMBDA_FUNCTION_NAME') is not None
+    # Check if running in Azure Functions (set by Azure runtime)
+    is_azure = os.environ.get('AZURE_FUNCTIONS_ENVIRONMENT') is not None
 
     # Also check if secrets are already present (e.g., from .env in local dev)
     has_credentials = os.environ.get('EPICOR_BASE_URL') is not None
 
-    if not is_lambda:
-        logger.info("Not running in AWS Lambda - skipping Secrets Manager")
+    if not is_azure:
+        logger.info("Not running in Azure Functions - skipping Key Vault")
         return False
 
     if has_credentials:
-        logger.info("Credentials already set in environment - skipping Secrets Manager")
+        logger.info("Credentials already set in environment - skipping Key Vault")
         return False
 
-    # Determine secret name
-    secret_name = secret_name or os.environ.get('AWS_SECRET_NAME', 'epicor-hubspot-credentials')
+    # Determine vault URL
+    vault_url = vault_url or os.environ.get('AZURE_KEYVAULT_URL')
+    if not vault_url:
+        logger.error("AZURE_KEYVAULT_URL not set - cannot load secrets from Key Vault")
+        raise ValueError("AZURE_KEYVAULT_URL environment variable is required")
 
-    logger.info(f"Loading secrets from AWS Secrets Manager: {secret_name}")
+    logger.info(f"Loading secrets from Azure Key Vault: {vault_url}")
+
+    # Map Key Vault secret names (hyphenated) to environment variable names (underscored)
+    secret_mapping = {
+        "epicor-base-url": "EPICOR_BASE_URL",
+        "epicor-company": "EPICOR_COMPANY",
+        "epicor-username": "EPICOR_USERNAME",
+        "epicor-password": "EPICOR_PASSWORD",
+        "epicor-api-key": "EPICOR_API_KEY",
+        "hubspot-api-key": "HUBSPOT_API_KEY",
+        "hubspot-quotes-pipeline-id": "HUBSPOT_QUOTES_PIPELINE_ID",
+        "hubspot-orders-pipeline-id": "HUBSPOT_ORDERS_PIPELINE_ID",
+    }
 
     try:
-        import boto3
-        from botocore.exceptions import ClientError
+        from azure.identity import DefaultAzureCredential
+        from azure.keyvault.secrets import SecretClient
 
-        # Get region from environment or default
-        region = os.environ.get('AWS_REGION', 'us-east-1')
+        credential = DefaultAzureCredential()
+        client = SecretClient(vault_url=vault_url, credential=credential)
 
-        # Create Secrets Manager client
-        client = boto3.client('secretsmanager', region_name=region)
-
-        # Fetch the secret
-        response = client.get_secret_value(SecretId=secret_name)
-
-        # Parse secret string as JSON
-        if 'SecretString' in response:
-            secrets = json.loads(response['SecretString'])
-        else:
-            # Binary secret - decode first
-            import base64
-            secrets = json.loads(base64.b64decode(response['SecretBinary']))
-
-        # Set each secret as environment variable
         loaded_keys = []
-        for key, value in secrets.items():
-            # Convert to uppercase for consistency
-            env_key = key.upper()
-            os.environ[env_key] = str(value)
-            loaded_keys.append(env_key)
+        for secret_name, env_key in secret_mapping.items():
+            try:
+                secret = client.get_secret(secret_name)
+                if secret.value:
+                    os.environ[env_key] = secret.value
+                    loaded_keys.append(env_key)
+            except Exception as e:
+                logger.warning(f"Could not load secret '{secret_name}': {e}")
 
-        logger.info(f"Successfully loaded {len(loaded_keys)} secrets from AWS Secrets Manager")
+        logger.info(f"Successfully loaded {len(loaded_keys)} secrets from Azure Key Vault")
         logger.debug(f"Loaded keys: {', '.join(loaded_keys)}")
 
         return True
 
     except ImportError:
-        logger.error("boto3 not installed - cannot load from Secrets Manager")
-        raise
-    except ClientError as e:
-        error_code = e.response.get('Error', {}).get('Code', 'Unknown')
-        if error_code == 'ResourceNotFoundException':
-            logger.error(f"Secret '{secret_name}' not found in Secrets Manager")
-        elif error_code == 'AccessDeniedException':
-            logger.error(f"Access denied to secret '{secret_name}' - check IAM permissions")
-        else:
-            logger.error(f"Failed to load secret '{secret_name}': {e}")
-        raise
-    except json.JSONDecodeError as e:
-        logger.error(f"Secret '{secret_name}' is not valid JSON: {e}")
+        logger.error("azure-identity or azure-keyvault-secrets not installed")
         raise
     except Exception as e:
-        logger.error(f"Unexpected error loading secrets: {e}")
+        logger.error(f"Failed to load secrets from Key Vault: {e}")
         raise
 
 
@@ -167,14 +151,14 @@ class Settings(BaseSettings):
         description="HubSpot pipeline ID for orders (deals)"
     )
 
-    # AWS Configuration
-    aws_region: str = Field(
-        default="us-east-1",
-        description="AWS region for services"
-    )
-    aws_s3_bucket: Optional[str] = Field(
+    # Azure Configuration
+    azure_keyvault_url: Optional[str] = Field(
         default=None,
-        description="S3 bucket for logs and artifacts"
+        description="Azure Key Vault URL for secrets"
+    )
+    azure_storage_connection_string: Optional[str] = Field(
+        default=None,
+        description="Azure Blob Storage connection string for logs"
     )
 
     # Sync Configuration

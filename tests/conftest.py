@@ -21,8 +21,8 @@ def mock_settings():
     settings.hubspot_api_key = "test_hubspot_key"
     settings.hubspot_quotes_pipeline_id = "quotes_pipeline_123"
     settings.hubspot_orders_pipeline_id = "orders_pipeline_456"
-    settings.aws_region = "us-east-1"
-    settings.aws_s3_bucket = "test-bucket"
+    settings.azure_keyvault_url = "https://test-keyvault.vault.azure.net/"
+    settings.azure_storage_connection_string = "DefaultEndpointsProtocol=https;AccountName=test;EndpointSuffix=core.windows.net"
     settings.sync_batch_size = 100
     settings.sync_max_retries = 3
     settings.log_level = "INFO"
