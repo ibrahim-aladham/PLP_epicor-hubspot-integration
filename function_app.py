@@ -11,10 +11,6 @@ import logging
 import json
 from datetime import datetime
 
-from src.config import load_secrets_from_cloud, get_settings
-from src.main import main
-from src.utils.logger import setup_logger
-
 app = func.FunctionApp()
 
 logger = logging.getLogger(__name__)
@@ -29,6 +25,10 @@ def scheduled_sync(timer: func.TimerRequest) -> None:
     """
     Timer-triggered sync that runs daily at 2 AM EST (7 AM UTC).
     """
+    from src.config import load_secrets_from_cloud, get_settings
+    from src.main import main
+    from src.utils.logger import setup_logging
+
     logger.info("Timer trigger fired for Epicor-HubSpot sync")
 
     if timer.past_due:
@@ -37,7 +37,7 @@ def scheduled_sync(timer: func.TimerRequest) -> None:
     try:
         load_secrets_from_cloud()
         settings = get_settings(force_reload=True)
-        setup_logger("epicor_hubspot_sync", settings.log_level)
+        setup_logging(settings.log_level)
 
         result = main()
         logger.info(f"Scheduled sync completed: {json.dumps(result, default=str)}")
@@ -54,12 +54,16 @@ def manual_sync(req: func.HttpRequest) -> func.HttpResponse:
 
     GET or POST /api/sync
     """
+    from src.config import load_secrets_from_cloud, get_settings
+    from src.main import main
+    from src.utils.logger import setup_logging
+
     logger.info("HTTP trigger received for Epicor-HubSpot sync")
 
     try:
         load_secrets_from_cloud()
         settings = get_settings(force_reload=True)
-        setup_logger("epicor_hubspot_sync", settings.log_level)
+        setup_logging(settings.log_level)
 
         result = main()
 

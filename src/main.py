@@ -18,7 +18,7 @@ from src.clients.epicor_client import EpicorClient
 from src.clients.hubspot_client import HubSpotClient
 from src.sync.sync_manager import SyncManager
 from src.config import get_settings
-from src.utils.logger import setup_logger
+from src.utils.logger import setup_logging
 
 
 # Module-level logger (basic until settings are loaded)
@@ -107,6 +107,6 @@ if __name__ == "__main__":
 
     # Setup logging for local run
     settings = get_settings()
-    logger = setup_logger("epicor_hubspot_sync", settings.log_level)
+    setup_logging(settings.log_level)
 
     main()

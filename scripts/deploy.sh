@@ -11,7 +11,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 APP_NAME="${AZURE_FUNCTION_APP_NAME:-epicor-hubspot-sync-production}"
-RESOURCE_GROUP="${AZURE_RESOURCE_GROUP:-epicor-hubspot-rg}"
+RESOURCE_GROUP="${AZURE_RESOURCE_GROUP:-PLP_CA_Epicor_Hubspot}"
 
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}Epicor-HubSpot Integration Deployment${NC}"
@@ -51,7 +51,7 @@ if [[ "$1" == "--deploy-infra" ]]; then
     # Create resource group if it doesn't exist
     az group create \
         --name "${RESOURCE_GROUP}" \
-        --location "eastus" \
+        --location "canadacentral" \
         --output none 2>/dev/null || true
 
     az deployment group create \
