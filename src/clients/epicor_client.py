@@ -8,6 +8,7 @@ retry logic, and error handling.
 
 import base64
 import logging
+import time
 from typing import Dict, List, Optional, Any
 from urllib.parse import urlencode
 import requests
@@ -123,8 +124,8 @@ class EpicorClient:
         """
         Fetch all pages of data from an OData endpoint.
 
-        Handles OData pagination using $top and $skip parameters, and follows
-        @odata.nextLink if provided.
+        Handles OData pagination using $top and $skip parameters.
+        Retries with exponential backoff on Epicor license limit errors.
 
         Args:
             url: Base URL (may already contain query parameters)
@@ -134,7 +135,7 @@ class EpicorClient:
             List of all records across all pages
 
         Raises:
-            EpicorAPIError: If API request fails
+            EpicorAPIError: If API request fails after all retries
         """
         if batch_size is None:
             batch_size = self.batch_size
@@ -142,6 +143,8 @@ class EpicorClient:
         all_records = []
         skip = 0
         page = 1
+        license_max_retries = 5
+        license_base_delay = 30  # seconds
 
         while True:
             # Add pagination parameters
@@ -154,11 +157,25 @@ class EpicorClient:
                 response = self.session.get(paged_url, timeout=30)
 
                 if not response.ok:
-                    raise EpicorAPIError(
-                        f"Request failed: {response.text}",
-                        status_code=response.status_code,
-                        response=response.text
-                    )
+                    # Check for Epicor license limit error (retryable)
+                    if self._is_license_error(response):
+                        self._retry_on_license_error(
+                            paged_url, license_max_retries, license_base_delay
+                        )
+                        # Retry succeeded — re-fetch this page
+                        response = self.session.get(paged_url, timeout=30)
+                        if not response.ok:
+                            raise EpicorAPIError(
+                                f"Request failed after license retry: {response.text}",
+                                status_code=response.status_code,
+                                response=response.text
+                            )
+                    else:
+                        raise EpicorAPIError(
+                            f"Request failed: {response.text}",
+                            status_code=response.status_code,
+                            response=response.text
+                        )
 
                 data = response.json()
                 records = data.get('value', [])
@@ -185,6 +202,63 @@ class EpicorClient:
                 raise EpicorAPIError(f"Request failed: {str(e)}")
 
         return all_records
+
+    def _is_license_error(self, response) -> bool:
+        """Check if an HTTP response is an Epicor license limit error."""
+        try:
+            body = response.text
+            return (
+                response.status_code == 400
+                and ("LicenseAccessException" in body or "Maximum users exceeded" in body)
+            )
+        except Exception:
+            return False
+
+    def _retry_on_license_error(
+        self, url: str, max_retries: int, base_delay: float
+    ) -> None:
+        """
+        Wait and retry when Epicor license limit is hit.
+
+        Uses exponential backoff: 30s, 60s, 120s, 240s, 480s.
+
+        Args:
+            url: The URL being fetched (for logging)
+            max_retries: Maximum retry attempts
+            base_delay: Initial delay in seconds
+
+        Raises:
+            EpicorAPIError: If all retries exhausted
+        """
+        for attempt in range(1, max_retries + 1):
+            delay = base_delay * (2 ** (attempt - 1))
+            self.logger.warning(
+                f"Epicor license limit hit. "
+                f"Retry {attempt}/{max_retries} in {delay}s..."
+            )
+            time.sleep(delay)
+
+            try:
+                response = self.session.get(url, timeout=30)
+                if response.ok:
+                    self.logger.info(
+                        f"License retry {attempt} succeeded."
+                    )
+                    return
+                if not self._is_license_error(response):
+                    # Different error — don't keep retrying for license
+                    raise EpicorAPIError(
+                        f"Request failed: {response.text}",
+                        status_code=response.status_code,
+                        response=response.text
+                    )
+            except requests.exceptions.RequestException as e:
+                raise EpicorAPIError(f"Request failed during license retry: {str(e)}")
+
+        raise EpicorAPIError(
+            f"Epicor license limit exceeded after {max_retries} retries "
+            f"(waited {base_delay * (2 ** max_retries - 1)}s total)"
+        )
 
     def get_entity(
         self,
