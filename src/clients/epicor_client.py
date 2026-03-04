@@ -176,8 +176,9 @@ class EpicorClient:
                     f"total: {len(all_records)}"
                 )
 
-                # Check if there's a next link
-                if '@odata.nextLink' not in data:
+                # If we got fewer records than requested, we've reached the last page.
+                # Note: Epicor does not return @odata.nextLink, so we cannot rely on it.
+                if len(records) < batch_size:
                     break
 
             except requests.exceptions.RequestException as e:
