@@ -11,7 +11,6 @@ For local development:
 """
 
 import logging
-import sys
 from datetime import datetime
 
 from src.clients.epicor_client import EpicorClient
@@ -49,18 +48,16 @@ def main():
 
     except Exception as e:
         logger.error(f"Failed to initialize clients: {e}")
-        sys.exit(1)
+        raise
 
     # Test connections
     logger.info("Testing API connections...")
 
     if not epicor_client.test_connection():
-        logger.error("Epicor connection test failed")
-        sys.exit(1)
+        raise RuntimeError("Epicor connection test failed")
 
     if not hubspot_client.test_connection():
-        logger.error("HubSpot connection test failed")
-        sys.exit(1)
+        raise RuntimeError("HubSpot connection test failed")
 
     logger.info("✅ All connections successful")
 
@@ -97,7 +94,7 @@ def main():
 
     except Exception as e:
         logger.error(f"Sync failed: {e}", exc_info=True)
-        sys.exit(1)
+        raise
 
 
 if __name__ == "__main__":
