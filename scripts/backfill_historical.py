@@ -207,6 +207,26 @@ def get_date_filter(start_year: int, end_year: int, date_field: str = "EntryDate
     return f"{date_field} ge {start_date} and {date_field} lt {end_date}"
 
 
+def get_monthly_date_filters(year: int, date_field: str = "OrderDate") -> list:
+    """
+    Build monthly OData date filters for a given year.
+    Splits a year into 12 monthly filters to avoid Epicor $skip performance issues.
+
+    Returns:
+        List of (label, filter_string) tuples
+    """
+    filters = []
+    for month in range(1, 13):
+        start = f"{year}-{month:02d}-01T00:00:00Z"
+        if month == 12:
+            end = f"{year + 1}-01-01T00:00:00Z"
+        else:
+            end = f"{year}-{month + 1:02d}-01T00:00:00Z"
+        label = f"{year}-{month:02d}"
+        filters.append((label, f"{date_field} ge {start} and {date_field} lt {end}"))
+    return filters
+
+
 def sync_customers(
     epicor_client: EpicorClient,
     hubspot_client: HubSpotClient,
@@ -357,27 +377,33 @@ def sync_orders_by_year(
 
         print(f"\n--- Processing orders for {year} ---")
 
-        date_filter = get_date_filter(year, year, "OrderDate")
+        # Use monthly batching to avoid Epicor $skip performance degradation
+        monthly_filters = get_monthly_date_filters(year, "OrderDate")
+        year_stats = {'total': 0, 'created': 0, 'updated': 0, 'errors': 0}
+
+        for month_label, date_filter in monthly_filters:
+            if dry_run:
+                orders = epicor_client.get_orders(
+                    expand_line_items=False,
+                    filter_condition=date_filter
+                )
+                count = len(orders)
+                if count > 0:
+                    print(f"  [DRY RUN] {month_label}: {count} orders")
+                year_stats['total'] += count
+                continue
+
+            order_sync = OrderSync(epicor_client, hubspot_client, failed_tracker)
+            result = order_sync.sync_all_orders(filter_condition=date_filter)
+            year_stats['total'] += result.get('total', 0)
+            year_stats['created'] += result.get('created', 0)
+            year_stats['updated'] += result.get('updated', 0)
+            year_stats['errors'] += result.get('errors', 0)
 
         if dry_run:
-            # Count orders for this year
-            orders = epicor_client.get_orders(
-                expand_line_items=False,
-                filter_condition=date_filter
-            )
-            print(f"[DRY RUN] Would sync {len(orders)} orders from {year}")
-            total_stats['total'] += len(orders)
+            print(f"[DRY RUN] Would sync {year_stats['total']} orders from {year}")
+            total_stats['total'] += year_stats['total']
             continue
-
-        order_sync = OrderSync(epicor_client, hubspot_client, failed_tracker)
-        result = order_sync.sync_all_orders(filter_condition=date_filter)
-
-        year_stats = {
-            'total': result.get('total', 0),
-            'created': result.get('created', 0),
-            'updated': result.get('updated', 0),
-            'errors': result.get('errors', 0)
-        }
 
         total_stats['total'] += year_stats['total']
         total_stats['created'] += year_stats['created']

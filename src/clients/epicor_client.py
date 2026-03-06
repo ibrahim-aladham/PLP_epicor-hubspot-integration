@@ -154,7 +154,7 @@ class EpicorClient:
             self.logger.debug(f"Fetching page {page}: {paged_url}")
 
             try:
-                response = self.session.get(paged_url, timeout=30)
+                response = self.session.get(paged_url, timeout=120)
 
                 if not response.ok:
                     # Check for Epicor license limit error (retryable)
@@ -163,7 +163,7 @@ class EpicorClient:
                             paged_url, license_max_retries, license_base_delay
                         )
                         # Retry succeeded — re-fetch this page
-                        response = self.session.get(paged_url, timeout=30)
+                        response = self.session.get(paged_url, timeout=120)
                         if not response.ok:
                             raise EpicorAPIError(
                                 f"Request failed after license retry: {response.text}",
