@@ -410,5 +410,12 @@ class Pipelines:
         return get_settings().hubspot_orders_pipeline_id
 
 
-# Convenience alias for settings singleton
-settings = get_settings()
+# Lazy convenience alias for settings singleton
+# Cannot call get_settings() at import time in Azure Functions because
+# Key Vault secrets are not yet loaded when modules are first imported.
+class _LazySettings:
+    """Proxy that defers Settings() instantiation until first attribute access."""
+    def __getattr__(self, name):
+        return getattr(get_settings(), name)
+
+settings = _LazySettings()
