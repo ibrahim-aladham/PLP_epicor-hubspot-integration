@@ -38,12 +38,20 @@ def main():
 
     # Initialize clients
     logger.info("Initializing API clients...")
+    settings = get_settings()
 
     try:
-        epicor_client = EpicorClient()
+        epicor_client = EpicorClient(
+            base_url=settings.epicor_base_url,
+            company=settings.epicor_company,
+            username=settings.epicor_username,
+            password=settings.epicor_password,
+            api_key=settings.epicor_api_key,
+            batch_size=settings.sync_batch_size,
+        )
         logger.info("✅ Epicor client initialized")
 
-        hubspot_client = HubSpotClient()
+        hubspot_client = HubSpotClient(api_key=settings.hubspot_api_key)
         logger.info("✅ HubSpot client initialized")
 
     except Exception as e:
