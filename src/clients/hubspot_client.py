@@ -512,9 +512,11 @@ class HubSpotClient:
         Returns:
             Product object if found, None otherwise
         """
+        # Sanitize SKU: HubSpot search API rejects values with unescaped quotes
+        sanitized_sku = sku.replace('"', '\\"')
         results = self.search_objects(
             "products",
-            [{"filters": [{"propertyName": "hs_sku", "operator": "EQ", "value": sku}]}]
+            [{"filters": [{"propertyName": "hs_sku", "operator": "EQ", "value": sanitized_sku}]}]
         )
         return results[0] if results else None
 

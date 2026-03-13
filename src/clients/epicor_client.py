@@ -386,8 +386,9 @@ class EpicorClient:
         """
         Find a sales order that was created from a specific quote.
 
-        In Epicor, when a quote is converted to an order, the order's
-        QuoteNum field references the original quote.
+        In Epicor, the quote-to-order link is on OrderDtl (line level),
+        not the order header. We query OrderDtl for QuoteNum, get the
+        parent OrderNum, then fetch the full order.
 
         Args:
             quote_num: The quote number to search for
@@ -396,11 +397,25 @@ class EpicorClient:
         Returns:
             Order record if found, None otherwise
         """
+        # Find order line linked to this quote
+        order_dtls = self.get_entity(
+            service="Erp.BO.SalesOrderSvc",
+            entity_set="OrderDtls",
+            filter_expr=f"QuoteNum eq {quote_num}",
+            select="OrderNum",
+            limit=1
+        )
+        if not order_dtls:
+            return None
+
+        order_num = order_dtls[0]['OrderNum']
+
+        # Fetch the full order
         expand = "OrderDtls" if expand_line_items else None
         orders = self.get_entity(
             service="Erp.BO.SalesOrderSvc",
             entity_set="SalesOrders",
-            filter_expr=f"QuoteNum eq {quote_num}",
+            filter_expr=f"OrderNum eq {order_num}",
             expand=expand,
             limit=1
         )
