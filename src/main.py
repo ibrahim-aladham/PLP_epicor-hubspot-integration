@@ -24,9 +24,14 @@ from src.utils.logger import setup_logging
 logger = logging.getLogger(__name__)
 
 
-def main():
+def main(full_sync: bool = False, delta_days: int = 3):
     """
     Main synchronization function.
+
+    Args:
+        full_sync: If True, sync all records. If False (default), only sync
+                   records modified in the last delta_days days.
+        delta_days: Number of days to look back for delta sync (default 3).
 
     Returns:
         Sync summary
@@ -72,9 +77,14 @@ def main():
     # Initialize sync manager
     sync_manager = SyncManager(epicor_client, hubspot_client)
 
-    # Run full sync
+    # Run sync
     try:
-        result = sync_manager.run_full_sync()
+        if full_sync:
+            logger.info("Running FULL sync (all records)")
+            result = sync_manager.run_full_sync()
+        else:
+            logger.info(f"Running DELTA sync (last {delta_days} days)")
+            result = sync_manager.run_delta_sync(delta_days=delta_days)
 
         logger.info("\n" + "=" * 80)
         logger.info("SYNC SUMMARY:")

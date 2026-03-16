@@ -5,7 +5,7 @@ Coordinates all sync operations in the correct order.
 
 import logging
 from typing import Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from src.clients.epicor_client import EpicorClient
 from src.clients.hubspot_client import HubSpotClient
@@ -134,6 +134,108 @@ class SyncManager:
 
         logger.info("\n" + "=" * 80)
         logger.info("FULL SYNC COMPLETE")
+        logger.info(f"Duration: {duration:.2f} seconds")
+        logger.info(f"Success: {summary['success']}")
+        if self.failed_tracker.has_failures():
+            logger.warning(f"Failed records logged to: {self.failed_tracker.output_file}")
+        logger.info("=" * 80)
+
+        return summary
+
+    def run_delta_sync(self, delta_days: int = 3) -> Dict[str, Any]:
+        """
+        Run delta synchronization — only fetch records modified in the last N days.
+
+        Uses Epicor's ChangeDate field to filter quotes and orders.
+        Customers are always synced in full (small dataset, ~1300 records).
+
+        Args:
+            delta_days: Number of days to look back (default 3 for safety margin)
+
+        Returns:
+            Complete sync summary
+        """
+        start_time = datetime.now()
+        cutoff_date = (start_time - timedelta(days=delta_days)).strftime('%Y-%m-%d')
+
+        logger.info("=" * 80)
+        logger.info("STARTING DELTA SYNC")
+        logger.info(f"Time: {start_time.isoformat()}")
+        logger.info(f"Looking back {delta_days} days (since {cutoff_date})")
+        logger.info("=" * 80)
+
+        summary = {
+            'start_time': start_time.isoformat(),
+            'mode': 'delta',
+            'delta_days': delta_days,
+            'cutoff_date': cutoff_date,
+            'customers': None,
+            'quotes': None,
+            'orders': None,
+            'success': True,
+            'errors': []
+        }
+
+        # 1. Sync Customers (full sync — small dataset)
+        if settings.sync_customers:
+            try:
+                logger.info("\n" + "=" * 60)
+                logger.info("PHASE 1: CUSTOMER SYNC (full)")
+                logger.info("=" * 60)
+                summary['customers'] = self.customer_sync.sync_all_customers()
+            except Exception as e:
+                logger.error(f"Customer sync failed: {e}", exc_info=True)
+                summary['success'] = False
+                summary['errors'].append(f"Customer sync: {str(e)}")
+
+        # 2. Sync Quotes (delta — only recently changed)
+        quote_filter = f"ChangeDate ge '{cutoff_date}'"
+        if settings.sync_quotes:
+            try:
+                logger.info("\n" + "=" * 60)
+                logger.info(f"PHASE 2: QUOTE SYNC (delta: {quote_filter})")
+                logger.info("=" * 60)
+                summary['quotes'] = self.quote_sync.sync_all_quotes(
+                    filter_condition=quote_filter
+                )
+            except Exception as e:
+                logger.error(f"Quote sync failed: {e}", exc_info=True)
+                summary['success'] = False
+                summary['errors'].append(f"Quote sync: {str(e)}")
+
+        # 3. Sync Orders (delta — only recently changed)
+        order_filter = f"ChangeDate ge '{cutoff_date}'"
+        if settings.sync_orders:
+            try:
+                logger.info("\n" + "=" * 60)
+                logger.info(f"PHASE 3: ORDER SYNC (delta: {order_filter})")
+                logger.info("=" * 60)
+                summary['orders'] = self.order_sync.sync_all_orders(
+                    filter_condition=order_filter
+                )
+            except Exception as e:
+                logger.error(f"Order sync failed: {e}", exc_info=True)
+                summary['success'] = False
+                summary['errors'].append(f"Order sync: {str(e)}")
+
+        # End time
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds()
+
+        summary['end_time'] = end_time.isoformat()
+        summary['duration_seconds'] = duration
+
+        # Get failed records summary
+        if self.failed_tracker.has_failures():
+            failed_summary = self.failed_tracker.get_summary()
+            summary['failed_records'] = failed_summary
+            summary['failed_records_file'] = self.failed_tracker.output_file
+
+        # Close the failed tracker
+        self.failed_tracker.close()
+
+        logger.info("\n" + "=" * 80)
+        logger.info("DELTA SYNC COMPLETE")
         logger.info(f"Duration: {duration:.2f} seconds")
         logger.info(f"Success: {summary['success']}")
         if self.failed_tracker.has_failures():

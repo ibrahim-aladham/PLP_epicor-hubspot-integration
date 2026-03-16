@@ -398,9 +398,12 @@ class EpicorClient:
             Order record if found, None otherwise
         """
         # Find order line linked to this quote
+        # Note: Must use OrderDtlSearchSvc, not SalesOrderSvc/OrderDtls,
+        # because Epicor applies $filter to the parent SalesOrder type
+        # when querying child entities through SalesOrderSvc.
         order_dtls = self.get_entity(
-            service="Erp.BO.SalesOrderSvc",
-            entity_set="OrderDtls",
+            service="Erp.BO.OrderDtlSearchSvc",
+            entity_set="OrderDtlSearches",
             filter_expr=f"QuoteNum eq {quote_num}",
             select="OrderNum",
             limit=1

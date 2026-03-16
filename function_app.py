@@ -65,7 +65,11 @@ def manual_sync(req: func.HttpRequest) -> func.HttpResponse:
         settings = get_settings(force_reload=True)
         setup_logging(settings.log_level)
 
-        result = main()
+        # Support query params: ?full_sync=true&delta_days=5
+        full_sync = req.params.get('full_sync', '').lower() == 'true'
+        delta_days = int(req.params.get('delta_days', '3'))
+
+        result = main(full_sync=full_sync, delta_days=delta_days)
 
         return func.HttpResponse(
             body=json.dumps({
