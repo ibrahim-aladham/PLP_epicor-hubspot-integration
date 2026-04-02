@@ -14,7 +14,7 @@
       "Host.Aggregator": "Trace"
     }
   },
-  "functionTimeout": "00:10:00",
+  "functionTimeout": "00:30:00",
   "extensions": {
     "timers": {
       "maxOutstandingInvocations": 1
