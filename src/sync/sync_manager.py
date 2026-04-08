@@ -156,7 +156,7 @@ class SyncManager:
             Complete sync summary
         """
         start_time = datetime.now()
-        cutoff_date = (start_time - timedelta(days=delta_days)).strftime('%Y-%m-%d')
+        cutoff_date = (start_time - timedelta(days=delta_days)).strftime('%Y-%m-%dT00:00:00Z')
 
         logger.info("=" * 80)
         logger.info("STARTING DELTA SYNC")
@@ -189,7 +189,7 @@ class SyncManager:
                 summary['errors'].append(f"Customer sync: {str(e)}")
 
         # 2. Sync Quotes (delta — only recently changed)
-        quote_filter = f"ChangeDate ge '{cutoff_date}'"
+        quote_filter = f"ChangeDate ge {cutoff_date}"
         if settings.sync_quotes:
             try:
                 logger.info("\n" + "=" * 60)
@@ -204,7 +204,7 @@ class SyncManager:
                 summary['errors'].append(f"Quote sync: {str(e)}")
 
         # 3. Sync Orders (delta — only recently changed)
-        order_filter = f"ChangeDate ge '{cutoff_date}'"
+        order_filter = f"ChangeDate ge {cutoff_date}"
         if settings.sync_orders:
             try:
                 logger.info("\n" + "=" * 60)
