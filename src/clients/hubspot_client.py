@@ -308,40 +308,46 @@ class HubSpotClient:
         association_type_id: int
     ) -> bool:
         """
-        Create association between two HubSpot objects.
+        Create association between two HubSpot objects using v3 API.
+
+        The v4 API returns 201 but does not persist associations reliably,
+        so we use the v3 API which works correctly.
 
         Args:
-            from_object: Source object type (e.g., "contacts")
+            from_object: Source object type (e.g., "deals")
             from_id: Source object ID
             to_object: Target object type (e.g., "companies")
             to_id: Target object ID
-            association_type_id: HubSpot association type ID
+            association_type_id: HubSpot association type ID (used to derive v3 type name)
 
         Returns:
             True if successful
-
-        Common association type IDs (V4 API):
-            - contact_to_company: 279
-            - deal_to_company: 341
-            - deal_to_contact: 3
-            - line_item_to_deal: 19
-
-        Example:
-            >>> client.create_association("contacts", "123", "companies", "456", 1)
         """
+        # Map from v4 type IDs to v3 association type names
+        v3_type_names = {
+            341: "deal_to_company",
+            279: "contact_to_company",
+            3: "deal_to_contact",
+            19: "line_item_to_deal",
+            451: "deal_to_deal",
+        }
+
+        # Build v3 type name: either from map or derive from object types
+        type_name = v3_type_names.get(association_type_id)
+        if not type_name:
+            # Derive: e.g., "deals" + "companies" -> "deal_to_company"
+            from_singular = from_object.rstrip('s').replace('line_item', 'line_item')
+            to_singular = to_object.rstrip('s').replace('ie', 'y')
+            type_name = f"{from_singular}_to_{to_singular}"
+
         url = (
-            f"{self.base_url}/crm/v4/objects/{from_object}/{from_id}/"
-            f"associations/{to_object}/{to_id}"
+            f"{self.base_url}/crm/v3/objects/{from_object}/{from_id}/"
+            f"associations/{to_object}/{to_id}/{type_name}"
         )
 
-        payload = [{
-            "associationCategory": "HUBSPOT_DEFINED",
-            "associationTypeId": association_type_id
-        }]
-
-        self._make_request("PUT", url, json=payload)
+        self._make_request("PUT", url)
         self.logger.debug(
-            f"Created association: {from_object}/{from_id} -> {to_object}/{to_id}"
+            f"Created association: {from_object}/{from_id} -> {to_object}/{to_id} ({type_name})"
         )
         return True
 
