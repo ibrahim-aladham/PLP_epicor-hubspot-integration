@@ -142,32 +142,32 @@ class SyncManager:
 
         return summary
 
-    def run_delta_sync(self, delta_days: int = 3) -> Dict[str, Any]:
+    def run_delta_sync(self, delta_hours: int = 16) -> Dict[str, Any]:
         """
-        Run delta synchronization — only fetch records modified in the last N days.
+        Run delta synchronization — only fetch records modified in the last N hours.
 
         Uses Epicor's ChangeDate field to filter quotes and orders.
         Customers are always synced in full (small dataset, ~1300 records).
 
         Args:
-            delta_days: Number of days to look back (default 3 for safety margin)
+            delta_hours: Number of hours to look back (default 16 for overnight gap coverage)
 
         Returns:
             Complete sync summary
         """
         start_time = datetime.now()
-        cutoff_date = (start_time - timedelta(days=delta_days)).strftime('%Y-%m-%dT00:00:00Z')
+        cutoff_date = (start_time - timedelta(hours=delta_hours)).strftime('%Y-%m-%dT%H:%M:%SZ')
 
         logger.info("=" * 80)
         logger.info("STARTING DELTA SYNC")
         logger.info(f"Time: {start_time.isoformat()}")
-        logger.info(f"Looking back {delta_days} days (since {cutoff_date})")
+        logger.info(f"Looking back {delta_hours} hours (since {cutoff_date})")
         logger.info("=" * 80)
 
         summary = {
             'start_time': start_time.isoformat(),
             'mode': 'delta',
-            'delta_days': delta_days,
+            'delta_hours': delta_hours,
             'cutoff_date': cutoff_date,
             'customers': None,
             'quotes': None,

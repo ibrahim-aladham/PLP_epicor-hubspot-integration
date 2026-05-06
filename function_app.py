@@ -17,13 +17,13 @@ logger = logging.getLogger(__name__)
 
 
 @app.timer_trigger(
-    schedule="0 0 7 * * *",
+    schedule="0 0 11-22 * * *",
     arg_name="timer",
     run_on_startup=False
 )
 def scheduled_sync(timer: func.TimerRequest) -> None:
     """
-    Timer-triggered sync that runs daily at 2 AM EST (7 AM UTC).
+    Timer-triggered sync that runs hourly from 7 AM to 5 PM ET (11-22 UTC covers both EST and EDT).
     """
     from src.config import load_secrets_from_cloud, get_settings
     from src.main import main
@@ -39,7 +39,7 @@ def scheduled_sync(timer: func.TimerRequest) -> None:
         settings = get_settings(force_reload=True)
         setup_logging(settings.log_level)
 
-        result = main()
+        result = main(delta_hours=16)
         logger.info(f"Scheduled sync completed: {json.dumps(result, default=str)}")
 
     except Exception as e:
@@ -66,9 +66,9 @@ def manual_sync(req: func.HttpRequest) -> func.HttpResponse:
         settings = get_settings(force_reload=True)
         setup_logging(settings.log_level)
 
-        # Support query params: ?full_sync=true&delta_days=5&skip_customers=true
+        # Support query params: ?full_sync=true&delta_hours=16&skip_customers=true
         full_sync = req.params.get('full_sync', '').lower() == 'true'
-        delta_days = int(req.params.get('delta_days', '3'))
+        delta_hours = int(req.params.get('delta_hours', '16'))
 
         # Allow skipping phases to stay within 30-min timeout
         if req.params.get('skip_customers', '').lower() == 'true':
@@ -78,7 +78,7 @@ def manual_sync(req: func.HttpRequest) -> func.HttpResponse:
         if req.params.get('skip_orders', '').lower() == 'true':
             settings.sync_orders = False
 
-        result = main(full_sync=full_sync, delta_days=delta_days)
+        result = main(full_sync=full_sync, delta_hours=delta_hours)
 
         return func.HttpResponse(
             body=json.dumps({
