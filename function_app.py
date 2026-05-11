@@ -67,8 +67,11 @@ def manual_sync(req: func.HttpRequest) -> func.HttpResponse:
         setup_logging(settings.log_level)
 
         # Support query params: ?full_sync=true&delta_hours=16&skip_customers=true
+        # Year range: ?start_year=2023&end_year=2024 (uses EntryDate filter)
         full_sync = req.params.get('full_sync', '').lower() == 'true'
         delta_hours = int(req.params.get('delta_hours', '16'))
+        start_year = req.params.get('start_year')
+        end_year = req.params.get('end_year')
 
         # Allow skipping phases to stay within 30-min timeout
         if req.params.get('skip_customers', '').lower() == 'true':
@@ -78,7 +81,18 @@ def manual_sync(req: func.HttpRequest) -> func.HttpResponse:
         if req.params.get('skip_orders', '').lower() == 'true':
             settings.sync_orders = False
 
-        result = main(full_sync=full_sync, delta_hours=delta_hours)
+        # Build year range filter if specified
+        year_filter = None
+        if start_year:
+            sy = int(start_year)
+            ey = int(end_year) if end_year else sy
+            start_date = f"{sy}-01-01T00:00:00Z"
+            end_date = f"{ey + 1}-01-01T00:00:00Z"
+            year_filter = f"EntryDate ge {start_date} and EntryDate lt {end_date}"
+            full_sync = True  # year range implies full sync mode
+            logger.info(f"Year range filter: {year_filter}")
+
+        result = main(full_sync=full_sync, delta_hours=delta_hours, filter_condition=year_filter)
 
         return func.HttpResponse(
             body=json.dumps({

@@ -24,7 +24,7 @@ from src.utils.logger import setup_logging
 logger = logging.getLogger(__name__)
 
 
-def main(full_sync: bool = False, delta_hours: int = 16):
+def main(full_sync: bool = False, delta_hours: int = 16, filter_condition: str = None):
     """
     Main synchronization function.
 
@@ -32,6 +32,7 @@ def main(full_sync: bool = False, delta_hours: int = 16):
         full_sync: If True, sync all records. If False (default), only sync
                    records modified in the last delta_hours hours.
         delta_hours: Number of hours to look back for delta sync (default 16).
+        filter_condition: Optional OData filter (e.g., year range) applied to quotes and orders.
 
     Returns:
         Sync summary
@@ -81,7 +82,7 @@ def main(full_sync: bool = False, delta_hours: int = 16):
     try:
         if full_sync:
             logger.info("Running FULL sync (all records)")
-            result = sync_manager.run_full_sync()
+            result = sync_manager.run_full_sync(filter_condition=filter_condition)
         else:
             logger.info(f"Running DELTA sync (last {delta_hours} hours)")
             result = sync_manager.run_delta_sync(delta_hours=delta_hours)

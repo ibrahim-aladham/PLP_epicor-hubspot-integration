@@ -57,9 +57,12 @@ class SyncManager:
         self.order_sync = OrderSync(epicor_client, hubspot_client, self.failed_tracker)
         self.line_item_sync = LineItemSync(hubspot_client)
 
-    def run_full_sync(self) -> Dict[str, Any]:
+    def run_full_sync(self, filter_condition: str = None) -> Dict[str, Any]:
         """
         Run full synchronization process.
+
+        Args:
+            filter_condition: Optional OData filter for quotes/orders (e.g., year range)
 
         Returns:
             Complete sync summary
@@ -96,9 +99,11 @@ class SyncManager:
         if settings.sync_quotes:
             try:
                 logger.info("\n" + "=" * 60)
-                logger.info("PHASE 2: QUOTE SYNC")
+                logger.info(f"PHASE 2: QUOTE SYNC{f' (filter: {filter_condition})' if filter_condition else ''}")
                 logger.info("=" * 60)
-                summary['quotes'] = self.quote_sync.sync_all_quotes()
+                summary['quotes'] = self.quote_sync.sync_all_quotes(
+                    filter_condition=filter_condition
+                )
             except Exception as e:
                 logger.error(f"Quote sync failed: {e}", exc_info=True)
                 summary['success'] = False
@@ -108,9 +113,11 @@ class SyncManager:
         if settings.sync_orders:
             try:
                 logger.info("\n" + "=" * 60)
-                logger.info("PHASE 3: ORDER SYNC")
+                logger.info(f"PHASE 3: ORDER SYNC{f' (filter: {filter_condition})' if filter_condition else ''}")
                 logger.info("=" * 60)
-                summary['orders'] = self.order_sync.sync_all_orders()
+                summary['orders'] = self.order_sync.sync_all_orders(
+                    filter_condition=filter_condition
+                )
             except Exception as e:
                 logger.error(f"Order sync failed: {e}", exc_info=True)
                 summary['success'] = False
